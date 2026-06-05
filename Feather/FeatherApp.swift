@@ -152,6 +152,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		_createDocumentsDirectories()
 		ResetView.clearWorkCache()
 		_addDefaultCertificates()
+		_addDefaultSource()
 		return true
 	}
 	
@@ -193,6 +194,22 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		}
 	}
 	
+	private func _addDefaultSource() {
+		let sourceURL = "https://raw.githubusercontent.com/DzhabaApps/Dzhaba-Apps/refs/heads/main/DzhabaApps.json"
+		let importedKey = "dzhabaapps.didImportDefaultSource"
+		let defaults = UserDefaults.standard
+		guard !defaults.bool(forKey: importedKey) else { return }
+
+		if Storage.shared.getSources().contains(where: { $0.sourceURL?.absoluteString == sourceURL }) {
+			defaults.set(true, forKey: importedKey)
+			return
+		}
+
+		FR.handleSource(sourceURL) {
+			defaults.set(true, forKey: importedKey)
+		}
+	}
+
 	private func _addDefaultCertificates() {
 		guard
 			UserDefaults.standard.bool(forKey: "feather.didImportDefaultCertificates") == false,
