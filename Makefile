@@ -1,6 +1,6 @@
 NAME := Feather
 SCHEME := Feather
-PLATFORMS := iphoneos maccatalyst
+PLATFORMS := iphoneos
 
 TMP := $(TMPDIR)/$(NAME)
 CERT_JSON_URL := https://backloop.dev/pack.json
