@@ -153,6 +153,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		ResetView.clearWorkCache()
 		_addDefaultCertificates()
 		_addDefaultSource()
+		_enableDefaultSigningOptions()
 		return true
 	}
 	
@@ -208,6 +209,18 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		FR.handleSource(sourceURL) {
 			defaults.set(true, forKey: importedKey)
 		}
+	}
+
+	private func _enableDefaultSigningOptions() {
+		let importedKey = "dzhabaapps.didEnableDefaultSigningOptions"
+		let defaults = UserDefaults.standard
+		guard !defaults.bool(forKey: importedKey) else { return }
+
+		let optionsManager = OptionsManager.shared
+		optionsManager.options.post_installAppAfterSigned = true
+		optionsManager.options.post_deleteAppAfterSigned = true
+		optionsManager.saveOptions()
+		defaults.set(true, forKey: importedKey)
 	}
 
 	private func _addDefaultCertificates() {
