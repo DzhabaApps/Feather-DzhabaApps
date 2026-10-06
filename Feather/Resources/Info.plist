@@ -117,7 +117,7 @@
 			<string>thewonderofyou.Feather</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>feather</string>
+				<string>fizer-preview</string>
 			</array>
 		</dict>
 	</array>

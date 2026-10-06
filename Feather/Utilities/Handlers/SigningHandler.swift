@@ -13,6 +13,7 @@ import OSLog
 final class SigningHandler: NSObject {
 	private let _fileManager = FileManager.default
 	private let _uuid = UUID().uuidString
+	var signedAppUUID: String { _uuid }
 	private var _movedAppPath: URL?
 	// using uuid string is the best way to find the
 	// app we want to sign, it does not matter what
@@ -119,12 +120,11 @@ final class SigningHandler: NSObject {
 			throw SigningFileHandlerError.missingCertifcate
 		}
 		
-		try await self.move()
-		try await self.addToDatabase()
-		
 		if let error = handler.hadError {
 			throw error
 		}
+		try await self.move()
+		try await self.addToDatabase()
 	}
 	
 	func move() async throws {
@@ -148,14 +148,15 @@ final class SigningHandler: NSObject {
 		let app = try await _directory()
 		
 		guard let appUrl = _fileManager.getPath(in: app, for: "app") else {
-			return
+			throw SigningFileHandlerError.appNotFound
 		}
 		
-		await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+		await MainActor.run {
 			let bundle = Bundle(url: appUrl)
 			
 			Storage.shared.addSigned(
 				uuid: _uuid,
+				source: _app.source,
 				certificate: _options.signingOption != .default ? nil : appCertificate,
 				appName: bundle?.name,
 				appIdentifier: bundle?.bundleIdentifier,
@@ -163,7 +164,6 @@ final class SigningHandler: NSObject {
 				appIcon: bundle?.iconFileName
 			) { _ in
 				Logger.signing.info("[\(self._uuid)] Added to database")
-				continuation.resume()
 			}
 		}
 	}
@@ -443,11 +443,11 @@ enum SigningFileHandlerError: Error, LocalizedError {
 	
 	var errorDescription: String? {
 		switch self {
-		case .appNotFound: "Unable to locate bundle path."
-		case .infoPlistNotFound: "Unable to locate info.plist path."
-		case .missingCertifcate: "No certificate was specified."
-		case .disinjectFailed: "Removing mach-O load paths failed."
-		case .signFailed: "Signing failed."
+		case .appNotFound: .localized("Unable to locate bundle path.")
+		case .infoPlistNotFound: .localized("Unable to locate info.plist path.")
+		case .missingCertifcate: .localized("No certificate was specified.")
+		case .disinjectFailed: .localized("Removing mach-O load paths failed.")
+		case .signFailed: .localized("Signing failed.")
 		}
 	}
 }

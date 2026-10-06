@@ -1,204 +1,144 @@
-//
-//  SettingsView.swift
-//  Feather
-//
-//  Created by samara on 10.04.2025.
-//
-
+// DzhabaApps: compact settings; advanced signing tools remain available.
 import SwiftUI
 import NimbleViews
-import UIKit
-import Darwin
-import IDeviceSwift
 
-// MARK: - View
 struct SettingsView: View {
-	@AppStorage("feather.selectedCert") private var _storedSelectedCert: Int = 0
-	@State private var _currentIcon: String? = UIApplication.shared.alternateIconName
-	
-	// MARK: Fetch
-	@FetchRequest(
-		entity: CertificatePair.entity(),
+	@AppStorage("feather.selectedCert") private var selectedCert: Int = 0
+	@FetchRequest(entity: CertificatePair.entity(),
 		sortDescriptors: [NSSortDescriptor(keyPath: \CertificatePair.date, ascending: false)],
-		animation: .snappy
-	) private var _certificates: FetchedResults<CertificatePair>
-	
-	private var selectedCertificate: CertificatePair? {
-		guard
-			_storedSelectedCert >= 0,
-			_storedSelectedCert < _certificates.count
-		else {
-			return nil
-		}
-		return _certificates[_storedSelectedCert]
-	}
+		animation: .snappy) private var certificates: FetchedResults<CertificatePair>
 
-    
-	private let _donationsUrl = "https://github.com/sponsors/claration"
-	private let _githubUrl = "https://github.com/claration/Feather"
-    
-	// MARK: Body
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				#if !NIGHTLY && !DEBUG
-					SettingsDonationCellView(site: _donationsUrl)
-				#endif
-                
-				_feedback()
-                
-				Section {
-					NavigationLink(destination: AppearanceView()) {
-						Label(.localized("Appearance"), systemImage: "paintbrush")
-					}
-					NavigationLink(destination: AppIconView(currentIcon: $_currentIcon)) {
-						Label(.localized("App Icon"), systemImage: "app.badge")
-					}
-				}
-                
-				NBSection(.localized("Certificates")) {
-                    
-					if let cert = selectedCertificate {
-						CertificatesCellView(cert: cert)
+				NBSection(.localized("Certificate")) {
+					if certificates.indices.contains(selectedCert) {
+						CertificatesCellView(cert: certificates[selectedCert])
 					} else {
-						Text(.localized("No Certificate"))
-							.font(.footnote)
-							.foregroundColor(.disabled())
+						Text(.localized("No Certificate")).foregroundStyle(.secondary)
 					}
 					NavigationLink(destination: CertificatesView()) {
 						Label(.localized("Certificates"), systemImage: "checkmark.seal")
 					}
-                 
 				} footer: {
 					Text(.localized("Add and manage certificates used for signing applications."))
 				}
-                
-				NBSection(.localized("Features")) {
-					NavigationLink(destination: ConfigurationView()) {
-						Label(.localized("Signing Options"), systemImage: "signature")
-					}
-					NavigationLink(destination: ArchiveView()) {
-						Label(.localized("Archive & Compression"), systemImage: "archivebox")
-					}
-					NavigationLink(destination: InstallationView()) {
+				Section {
+					NavigationLink(destination: InstallationPreferencesView()) {
 						Label(.localized("Installation"), systemImage: "arrow.down.circle")
 					}
-				} footer: {
-					Text(.localized("Configure the apps way of installing, its zip compression levels, and custom modifications to apps."))
-				}
-                
-				_directories()
-                
-				Section {
-					NavigationLink(destination: ResetView()) {
-						Label(.localized("Reset"), systemImage: "trash")
+					NavigationLink(destination: StorageSettingsView()) {
+						Label(.localized("Storage"), systemImage: "internaldrive")
 					}
-				} footer: {
-					Text(.localized("Reset the applications sources, certificates, apps, and general contents."))
+					NavigationLink(destination: FizerHelpView()) {
+						Label(.localized("Help"), systemImage: "questionmark.circle")
+					}
+				}
+				Section {
+					NavigationLink(destination: AdvancedSettingsView()) {
+						Label(.localized("Advanced"), systemImage: "slider.horizontal.3")
+					}
+					NavigationLink(destination: AboutView()) {
+						Label(.localized("About"), systemImage: "info.circle")
+					}
 				}
 			}
 		}
 	}
 }
 
-// MARK: - View extension
-extension SettingsView {
-	@ViewBuilder
-	private func _feedback() -> some View {
-		Section {
-			NavigationLink(destination: AboutView()) {
-				Label {
-					Text(verbatim: .localized("About %@", arguments: Bundle.main.name))
-				} icon: {
-					FRAppIconView(size: 23)
+struct InstallationPreferencesView: View {
+	@StateObject private var manager = OptionsManager.shared
+	var body: some View {
+		NBList(.localized("Installation")) {
+			Section {
+				Toggle(.localized("Install After Signing"), isOn: $manager.options.post_installAppAfterSigned)
+				Toggle(.localized("Delete After Signing"), isOn: $manager.options.post_deleteAppAfterSigned)
+			} footer: { Text(.localized("Signing cleanup explanation")) }
+			SSLUpdateSection()
+			Section {
+				NavigationLink(destination: InstallationView()) {
+					Label(.localized("Advanced installation settings"), systemImage: "slider.horizontal.3")
 				}
 			}
-            
-			Button(.localized("Submit Feedback"), systemImage: "safari") {
-				let bugAction: UIAlertAction = .init(title: .localized("Bug Report"), style: .default) { _ in
-					UIApplication.open(_makeGitHubIssueURL(url: _githubUrl))
-				}
-				
-				let chooseAction: UIAlertAction = .init(title: .localized("Other"), style: .default) { _ in
-					UIApplication.open(URL(string: "\(_githubUrl)/issues/new/choose")!)
-				}
-				
-				UIAlertController.showAlertWithCancel(
-					title: .localized("Submit Feedback"),
-					message: nil,
-					actions: [bugAction, chooseAction]
-				)
+		}
+		.onChange(of: manager.options) { _ in manager.saveOptions() }
+	}
+}
+
+struct AdvancedSettingsView: View {
+	@State private var currentIcon: String? = UIApplication.shared.alternateIconName
+	var body: some View {
+		NBList(.localized("Advanced")) {
+			Section {
+				NavigationLink(destination: ConfigurationView()) { Label(.localized("Signing Options"), systemImage: "signature") }
+				NavigationLink(destination: InstallationView()) { Label(.localized("Advanced installation settings"), systemImage: "network") }
+				NavigationLink(destination: ArchiveView()) { Label(.localized("Archive & Compression"), systemImage: "archivebox") }
+			} footer: { Text(.localized("Advanced settings explanation")) }
+			Section {
+				NavigationLink(destination: AppearanceView()) { Label(.localized("Appearance"), systemImage: "paintbrush") }
+				NavigationLink(destination: AppIconView(currentIcon: $currentIcon)) { Label(.localized("App Icon"), systemImage: "app.badge") }
 			}
-			Button(.localized("GitHub Repository"), systemImage: "safari") {
-				UIApplication.open(_githubUrl)
+			Section {
+				Button(.localized("Open Documents"), systemImage: "folder") { UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!) }
+				Button(.localized("Open Archives"), systemImage: "folder") { UIApplication.open(FileManager.default.archives.toSharedDocumentsURL()!) }
+				Button(.localized("Open Certificates"), systemImage: "folder") { UIApplication.open(FileManager.default.certificates.toSharedDocumentsURL()!) }
+				NavigationLink(destination: ResetView()) { Label(.localized("Reset"), systemImage: "trash") }
 			}
-		} footer: {
-			Text(.localized("If any issues occur within the app please report it via the GitHub repository. When submitting an issue, make sure to submit detailed information."))
 		}
 	}
-    
-	@ViewBuilder
-	private func _directories() -> some View {
-		NBSection(.localized("Misc")) {
-			Button(.localized("Open Documents"), systemImage: "folder") {
-				UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!)
-			}
-			Button(.localized("Open Archives"), systemImage: "folder") {
-				UIApplication.open(FileManager.default.archives.toSharedDocumentsURL()!)
-			}
-			Button(.localized("Open Certificates"), systemImage: "folder") {
-				UIApplication.open(FileManager.default.certificates.toSharedDocumentsURL()!)
-			}
-		} footer: {
-			Text(.localized("All of the apps files are contained in the documents directory, here are some quick links to these."))
+}
+
+struct StorageSettingsView: View {
+	@State private var bytes: Int64 = 0
+	@State private var showClearConfirmation = false
+	@ObservedObject private var downloads = DownloadManager.shared
+	@ObservedObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
+	private var canClear: Bool { downloads.downloads.isEmpty && repositoryInstaller.signingName == nil && repositoryInstaller.installApp == nil }
+	var body: some View {
+		NBList(.localized("Storage")) {
+			Section {
+				LabeledContent(.localized("Local app files"), value: ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+			} footer: { Text(.localized("Storage explanation")) }
+			Section {
+				Button(.localized("Clear temporary files"), systemImage: "trash") { showClearConfirmation = true }
+					.disabled(!canClear)
+			} footer: { Text(.localized("Cache cleanup explanation")) }
 		}
+		.task { await updateSize() }
+		.alert(.localized("Clear temporary files"), isPresented: $showClearConfirmation) {
+			Button(.localized("Cancel"), role: .cancel) {}
+			Button(.localized("Delete"), role: .destructive) {
+				guard canClear else { return }
+				ResetView.clearWorkCache()
+				ResetView.clearNetworkCache()
+				Task { await updateSize() }
+			}
+		} message: { Text(.localized("Cache cleanup explanation")) }
 	}
-    
-	private func _makeGitHubIssueURL(url: String) -> String {
-		var configurationSection = "### App Configuration:\n"
-		
-		switch UserDefaults.standard.integer(forKey: "Feather.installationMethod") {
-		case 0: // Server
-			let serverMethod = UserDefaults.standard.integer(forKey: "Feather.serverMethod")
-			let ipFix = UserDefaults.standard.bool(forKey: "Feather.ipFix")
-			let serverType = (serverMethod == 0) ? "Fully Local" : "Semi Local"
-			configurationSection += "- Install method: `Server`\n"
-			configurationSection += "  - Server type: `\(serverType)`\n"
-			configurationSection += "  - IP Fix: `\(ipFix)`\n"
-		case 1: // idevice
-			let pairingPath = HeartbeatManager.pairingFile()
-			let pairingExists = FileManager.default.fileExists(atPath: pairingPath)
-			let pairingStatus = pairingExists ? "`Present`" : "`Not Present`"
-			configurationSection += "- Install method: `idevice`\n"
-			configurationSection += "  - Pairing file: \(pairingStatus)\n"
-		default:
-			configurationSection += "- Install method: `Unknown`\n"
+	private func updateSize() async {
+		let size = await Task.detached(priority: .utility) { () -> Int64 in
+			let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey]
+			guard let files = FileManager.default.enumerator(at: URL.documentsDirectory, includingPropertiesForKeys: keys) else { return 0 }
+			var total: Int64 = 0
+			for case let url as URL in files {
+				if let values = try? url.resourceValues(forKeys: Set(keys)), values.isRegularFile == true { total += Int64(values.fileSize ?? 0) }
+			}
+			return total
+		}.value
+		bytes = size
+	}
+}
+
+struct FizerHelpView: View {
+	var body: some View {
+		NBList(.localized("Help")) {
+			Section {
+				Button(.localized("Contact support"), systemImage: "message") { UIApplication.open("https://t.me/dzhabaraduev") }
+			}
+			NBSection(.localized("Installation is stuck")) { Text(.localized("Installation troubleshooting")) }
+			NBSection(.localized("Certificate")) { Text(.localized("Certificate troubleshooting")) }
+			NBSection(.localized("Install from repository")) { Text(.localized("Repository installation explanation")) }
 		}
-        
-		let body = """
-		### Device Information
-		- Device: `\(MobileGestalt().getStringForName("PhysicalHardwareNameString") ?? "Unknown")`
-		- iOS Version: `\(UIDevice.current.systemVersion)`
-		- App Version: `\(Bundle.main.version)`
-		
-		\(configurationSection)
-		
-		### Issue Description
-		<!-- Describe your issue here -->
-		
-		### Steps to Reproduce
-		1. 
-		2. 
-		3. 
-		
-		### Expected Behavior
-		
-		### Actual Behavior
-		"""
-		let encodedTitle = "[Bug] replace this with a descriptive title "
-			.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-		let encodedBody = body
-			.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-		return "\(url)/issues/new?template=bug.yml&title=\(encodedTitle)&text=\(encodedBody)"
 	}
 }

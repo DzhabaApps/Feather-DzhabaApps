@@ -284,14 +284,14 @@ extension SigningView {
 			using: _temporaryOptions,
 			icon: appIcon,
 			certificate: _selectedCert()
-		) { error in
+		) { error, signedApp in
 			if let error {
 				let ok = UIAlertAction(title: .localized("Dismiss"), style: .cancel) { _ in
 					dismiss()
 				}
 				
 				UIAlertController.showAlert(
-					title: "Error",
+					title: .localized("Error"),
 					message: error.localizedDescription,
 					actions: [ok]
 				)
@@ -303,9 +303,9 @@ extension SigningView {
 					Storage.shared.deleteApp(for: app)
 				}
 				
-				if _temporaryOptions.post_installAppAfterSigned {
+				if _temporaryOptions.post_installAppAfterSigned, let signedApp {
 					DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-						NotificationCenter.default.post(name: Notification.Name("Feather.installApp"), object: nil)
+						NotificationCenter.default.post(name: Notification.Name("Feather.installApp"), object: signedApp)
 					}
 				}
 				dismiss()

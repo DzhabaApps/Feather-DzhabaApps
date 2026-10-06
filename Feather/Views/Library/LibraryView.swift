@@ -196,9 +196,9 @@ struct LibraryView: View {
 					}
 				}
 			}
-			.onReceive(NotificationCenter.default.publisher(for: Notification.Name("Feather.installApp"))) { _ in
-				if let latest = _signedApps.first {
-					_selectedInstallAppPresenting = AnyApp(base: latest)
+			.onReceive(NotificationCenter.default.publisher(for: Notification.Name("Feather.installApp"))) { notification in
+				if let signedApp = notification.object as? Signed {
+					_selectedInstallAppPresenting = AnyApp(base: signedApp)
 				}
 			}
 			.onChange(of: _editMode) { mode in

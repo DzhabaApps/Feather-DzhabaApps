@@ -1,13 +1,24 @@
 NAME := Feather
 SCHEME := Feather
 PLATFORMS := iphoneos
+BUILD_SETTINGS ?=
 
 TMP := $(TMPDIR)/$(NAME)
 CERT_JSON_URL := https://backloop.dev/pack.json
 
-.PHONY: all clean deps $(PLATFORMS)
+.PHONY: all clean deps verify preview-screenshots $(PLATFORMS)
 
-all: $(PLATFORMS)
+all: verify $(PLATFORMS) preview-screenshots
+
+verify:
+	python3 tools/check_preview.py
+	xcrun swiftc Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/DownloadPresentation.swift tools/identity-tests/main.swift -o /tmp/fizer-identity-tests
+	/tmp/fizer-identity-tests
+	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/RepositoryInstallCoordinator.swift tools/coordinator-tests/main.swift -o /tmp/fizer-coordinator-tests
+	/tmp/fizer-coordinator-tests
+
+preview-screenshots:
+	python3 tools/capture_preview.py
 
 clean:
 	rm -rf $(TMP)
@@ -40,7 +51,7 @@ $(PLATFORMS): deps
 		-derivedDataPath $(TMP)/$@ \
 		-skipPackagePluginValidation \
 		CODE_SIGNING_ALLOWED=NO \
-		ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=NO
+		ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=NO $(BUILD_SETTINGS)
 
 	mkdir -p _build/Payload
 	cp -R _build/Applications/*.app _build/Payload/Feather.app
@@ -55,3 +66,4 @@ $(PLATFORMS): deps
 	else \
 		ditto -c -k --sequesterRsrc --keepParent _build/Payload/Feather.app "packages/Feather_Catalyst.zip"; \
 	fi
+	python3 tools/check_preview.py --ipa packages/Feather.ipa

@@ -110,19 +110,22 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 		let app = try await _directory()
 		
 		guard let appUrl = _fileManager.getPath(in: app, for: "app") else {
-			return
+			throw ImportedFileHandlerError.payloadNotFound
 		}
 		
 		let bundle = Bundle(url: appUrl)
 		
+		await MainActor.run {
 		Storage.shared.addImported(
 			uuid: _uuid,
+			source: _download?.source,
 			appName: bundle?.name,
 			appIdentifier: bundle?.bundleIdentifier,
 			appVersion: bundle?.version,
 			appIcon: bundle?.iconFileName
 		) { _ in
 			Logger.misc.info("[\(self._uuid)] Added to database")
+		}
 		}
 	}
 	
@@ -136,6 +139,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	}
 }
 
-private enum ImportedFileHandlerError: Error {
+private enum ImportedFileHandlerError: Error, LocalizedError {
 	case payloadNotFound
+	var errorDescription: String? { .localized("Import failed") }
 }

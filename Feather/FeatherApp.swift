@@ -17,10 +17,20 @@ struct FeatherApp: App {
 	let heartbeat = HeartbeatManager.shared
 	
 	@StateObject var downloadManager = DownloadManager.shared
+	@StateObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
 	let storage = Storage.shared
+
+	init() {
+		UserDefaults.standard.set(["ru"], forKey: "AppleLanguages")
+	}
 	
 	var body: some Scene {
 		WindowGroup {
+			if let screen = ProcessInfo.processInfo.environment["FIZER_PREVIEW_SCREEN"], Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" {
+				_previewScreen(screen)
+					.environment(\.managedObjectContext, storage.context)
+					.environment(\.locale, Locale(identifier: "ru"))
+			} else {
 			VStack {
 				DownloadHeaderView(downloadManager: downloadManager)
 					.transition(.move(edge: .top).combined(with: .opacity))
@@ -29,11 +39,29 @@ struct FeatherApp: App {
 					.onOpenURL(perform: _handleURL)
 					.transition(.move(edge: .top).combined(with: .opacity))
 			}
-			.animation(.smooth, value: downloadManager.manualDownloads.description)
+			.environment(\.locale, Locale(identifier: "ru"))
+			.overlay {
+				if let name = repositoryInstaller.signingName {
+					ZStack {
+						Color.black.opacity(0.25).ignoresSafeArea()
+						VStack(spacing: 16) {
+							ProgressView()
+							Text(.localized("Signing" )).font(.headline)
+							Text(name).font(.subheadline).lineLimit(2)
+						}.padding(28).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20)).padding()
+					}
+				}
+			}
+			.sheet(item: $repositoryInstaller.installApp) { app in
+				InstallPreviewView(app: app.base)
+					.presentationDetents([.height(220)])
+					.presentationDragIndicator(.visible)
+			}
+			.animation(.smooth, value: downloadManager.downloads.description)
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
 				DispatchQueue.main.async {
 					UIAlertController.showAlertWithOk(
-						title: "InvalidHostID",
+						title: .localized("InvalidHostID"),
 						message: .localized("Your pairing file is invalid and is incompatible with your device, please import a valid pairing file.")
 					)
 				}
@@ -46,11 +74,22 @@ struct FeatherApp: App {
 				
 				UIApplication.topViewController()?.view.window?.tintColor = UIColor(Color(hex: UserDefaults.standard.string(forKey: "Feather.userTintColor") ?? "#848ef9"))
 			}
+			}
+		}
+	}
+
+	@ViewBuilder
+	private func _previewScreen(_ screen: String) -> some View {
+		switch screen {
+		case "installation": NavigationStack { InstallationPreferencesView() }
+		case "advanced": NavigationStack { AdvancedSettingsView() }
+		case "help": NavigationStack { FizerHelpView() }
+		default: SettingsView()
 		}
 	}
 	
 	private func _handleURL(_ url: URL) {
-		if url.scheme == "feather" {
+		if url.scheme == "feather" || url.scheme == "fizer-preview" {
 			/// feather://import-certificate?p12=<base64>&mobileprovision=<base64>&password=<base64>
 			if url.host == "import-certificate" {
 				guard
@@ -228,7 +267,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 			for folderURL in folderContents {
 				guard folderURL.hasDirectoryPath else { continue }
 				
-				let certName = folderURL.lastPathComponent
+				let embeddedName = try? String(contentsOf: folderURL.appendingPathComponent("name.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+				let certName = embeddedName?.isEmpty == false ? embeddedName! : (folderURL.lastPathComponent == "one" ? .localized("My Certificate") : folderURL.lastPathComponent)
 				
 				let p12Url = folderURL.appendingPathComponent("cert.p12")
 				let provisionUrl = folderURL.appendingPathComponent("cert.mobileprovision")

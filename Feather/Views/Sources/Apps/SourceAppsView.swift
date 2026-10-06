@@ -83,11 +83,6 @@ struct SourceAppsView: View {
 					}
 				}
 				
-				if let url = _sources[0].patreonURL {
-					Button(.localized("Visit Patreon"), systemImage: "dollarsign.circle") {
-						UIApplication.open(url)
-					}
-				}
 			}
 			
 			Divider()
