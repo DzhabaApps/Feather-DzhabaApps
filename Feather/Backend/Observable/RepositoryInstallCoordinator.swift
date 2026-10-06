@@ -36,11 +36,7 @@ final class RepositoryInstallCoordinator: ObservableObject {
 
 	func install(_ app: AppInfoPresentable) {
 		guard !isBusy else { return }
-		guard !app.isSigned else {
-			guard let cert = Storage.shared.getCertificate(from: app), !cert.revoked, (cert.expiration ?? .distantPast) > .now else {
-				showError(.localized("Certificate unavailable explanation"))
-				return
-			}
+		if app.isSigned, let cert = Storage.shared.getCertificate(from: app), !cert.revoked, (cert.expiration ?? .distantPast) > .now {
 			installApp = AnyApp(base: app)
 			return
 		}
@@ -66,7 +62,7 @@ final class RepositoryInstallCoordinator: ObservableObject {
 			if let error { self.showError(error.localizedDescription); return }
 			guard let signedApp else { self.showError(.localized("Signed file not found")); return }
 			// Keep the signed copy for install retries even when the imported copy is removed.
-			if options.post_deleteAppAfterSigned { Storage.shared.deleteApp(for: app) }
+			if options.post_deleteAppAfterSigned && !app.isSigned { Storage.shared.deleteApp(for: app) }
 			self.installApp = AnyApp(base: signedApp)
 		}
 	}

@@ -26,6 +26,11 @@ struct FeatherApp: App {
 	
 	var body: some Scene {
 		WindowGroup {
+			if let screen = ProcessInfo.processInfo.environment["FIZER_PREVIEW_SCREEN"], Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" {
+				_previewScreen(screen)
+					.environment(\.managedObjectContext, storage.context)
+					.environment(\.locale, Locale(identifier: "ru"))
+			} else {
 			VStack {
 				DownloadHeaderView(downloadManager: downloadManager)
 					.transition(.move(edge: .top).combined(with: .opacity))
@@ -69,6 +74,17 @@ struct FeatherApp: App {
 				
 				UIApplication.topViewController()?.view.window?.tintColor = UIColor(Color(hex: UserDefaults.standard.string(forKey: "Feather.userTintColor") ?? "#848ef9"))
 			}
+			}
+		}
+	}
+
+	@ViewBuilder
+	private func _previewScreen(_ screen: String) -> some View {
+		switch screen {
+		case "installation": NavigationStack { InstallationPreferencesView() }
+		case "advanced": NavigationStack { AdvancedSettingsView() }
+		case "help": NavigationStack { FizerHelpView() }
+		default: SettingsView()
 		}
 	}
 	

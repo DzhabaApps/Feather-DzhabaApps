@@ -49,6 +49,7 @@ final class Storage {
 	let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
 	let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
 	var certificate: CertificatePair?
+	var signedCertificate: CertificatePair?
 	init() {
 		let model = NSManagedObjectModel()
 		model.entities = ["Imported", "Signed"].map { name in
@@ -70,7 +71,7 @@ final class Storage {
 	func getAppDirectory(for app: AppInfoPresentable) -> URL? { app.uuid.map { root.appendingPathComponent($0) } }
 	func deleteApp(for app: AppInfoPresentable) { context.delete(app as! NSManagedObject); try! context.save() }
 	func getCertificate(for index: Int) -> CertificatePair? { certificate }
-	func getCertificate(from app: AppInfoPresentable) -> CertificatePair? { certificate }
+	func getCertificate(from app: AppInfoPresentable) -> CertificatePair? { signedCertificate ?? certificate }
 	func makeApp(_ entity: String, source: URL, date: Date = .now, hasFiles: Bool = true) -> TestApp {
 		let app = NSEntityDescription.insertNewObject(forEntityName: entity, into: context) as! TestApp
 		app.uuid = UUID().uuidString; app.source = source; app.name = "Example"; app.identifier = "example.app"; app.date = date
@@ -130,4 +131,12 @@ store.certificate!.revoked = false
 store.certificate!.expiration = .now.addingTimeInterval(-1)
 installer.install(signed)
 check(installer.installApp == nil, "Expired signed certificate must block a new installation")
-print("Repository coordinator: 11 checks passed")
+store.signedCertificate = store.certificate
+store.certificate = CertificatePair()
+let previousCalls = FR.calls
+installer.install(signed)
+check(FR.calls == previousCalls + 1 && installer.isBusy, "A replacement certificate must allow re-signing the retained file")
+let replacement = store.makeApp("Signed", source: source)
+FR.pending!(nil, replacement)
+check(installer.installApp?.base.uuid == replacement.uuid, "Certificate replacement must install the new signed result")
+print("Repository coordinator: 13 checks passed")

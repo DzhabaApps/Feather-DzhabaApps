@@ -6,9 +6,9 @@ BUILD_SETTINGS ?=
 TMP := $(TMPDIR)/$(NAME)
 CERT_JSON_URL := https://backloop.dev/pack.json
 
-.PHONY: all clean deps $(PLATFORMS)
+.PHONY: all clean deps verify preview-screenshots $(PLATFORMS)
 
-all: verify $(PLATFORMS)
+all: verify $(PLATFORMS) preview-screenshots
 
 verify:
 	python3 tools/check_preview.py
@@ -16,6 +16,9 @@ verify:
 	/tmp/fizer-identity-tests
 	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/RepositoryInstallCoordinator.swift tools/coordinator-tests/main.swift -o /tmp/fizer-coordinator-tests
 	/tmp/fizer-coordinator-tests
+
+preview-screenshots:
+	python3 tools/capture_preview.py
 
 clean:
 	rm -rf $(TMP)
