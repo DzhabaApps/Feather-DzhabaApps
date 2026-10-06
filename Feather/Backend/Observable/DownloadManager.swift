@@ -199,6 +199,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
 	
 	func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
 		guard let download = getDownloadTask(by: downloadTask) else { return }
+		// A chunked response may never report an expected byte count.
+		// The completed file is now being unpacked, so cancellation must be disabled.
+		download.progress = 1
 		
 		let tempDirectory = FileManager.default.temporaryDirectory
 		let customTempDir = tempDirectory.appendingPathComponent("FeatherDownloads", isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
