@@ -25,7 +25,7 @@ struct AppVersionInfo: View {
 	var body: some View {
 		VStack(alignment: .leading, spacing: 2) {
 			HStack {
-				Text(.localized("Version %@", arguments: version))
+				Text(verbatim: .localized("Version %@", arguments: version))
 					.font(.subheadline)
 					.foregroundStyle(.secondary)
                 

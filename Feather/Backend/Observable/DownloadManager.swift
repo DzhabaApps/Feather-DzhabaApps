@@ -71,7 +71,7 @@ class DownloadManager: NSObject, ObservableObject {
 	override init() {
 		super.init()
 		let configuration = URLSessionConfiguration.default
-		_session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+		_session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
 	}
 	
 	func startDownload(

@@ -18984,6 +18984,28 @@
           }
         }
       }
+    },
+    "Restart" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Перезапустить"
+          }
+        }
+      }
+    },
+    "Later" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "ru" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Позже"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

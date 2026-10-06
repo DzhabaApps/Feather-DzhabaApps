@@ -18,10 +18,10 @@ public class NBFetchService {
 		
 		public var errorDescription: String? {
 			switch self {
-			case .invalidURL: "The URL is invalid."
-			case .networkError(let error): "Network error: \(error.localizedDescription)"
-			case .noData: "No data received."
-			case .parsingError(let error): "Failed to parse data: \(error.localizedDescription)"
+			case .invalidURL: "Некорректная ссылка."
+			case .networkError(let error): "Ошибка сети: \(error.localizedDescription)"
+			case .noData: "Сервер не передал данные."
+			case .parsingError(let error): "Не удалось прочитать данные: \(error.localizedDescription)"
 			}
 		}
 	}

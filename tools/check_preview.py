@@ -13,7 +13,8 @@ for key, entry in catalog['strings'].items():
     value = entry.get('localizations', {}).get('ru', {}).get('stringUnit', {}).get('value')
     assert value, f'Missing Russian translation: {key}'
     assert sorted(formats.findall(key)) == sorted(formats.findall(value)), f'Format mismatch: {key}'
-for path in (root/'Feather').rglob('*.swift'):
+paths = list((root/'Feather').rglob('*.swift')) + list((root/'NimbleKit/Sources/NimbleViews').rglob('*.swift')) + list((root/'NimbleKit/Sources/NimbleExtensions').rglob('*.swift'))
+for path in paths:
     for key in re.findall(r'\.localized\("((?:[^"\\]|\\.)*)"', path.read_text(encoding='utf-8')):
         if '\\(' in key:
             continue
