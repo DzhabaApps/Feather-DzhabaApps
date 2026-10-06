@@ -46,8 +46,8 @@ struct TunnelView: View {
 							if !HeartbeatManager.shared.checkSocketConnection().isConnected {
 								DispatchQueue.main.async {
 									UIAlertController.showAlertWithOk(
-										title: "Socket",
-										message: "Unable to connect to TCP. Make sure you have loopback VPN enabled and you are on WiFi or Airplane mode."
+										title: .localized("Connection error"),
+										message: .localized("Unable to connect to TCP. Make sure you have loopback VPN enabled and you are on WiFi or Airplane mode.")
 									)
 								}
 							}

@@ -52,8 +52,6 @@ struct ServerView: View {
 	@AppStorage("Feather.serverMethod") private var _serverMethod: Int = 0
 	private let _serverMethods: [String] = [.localized("Fully Local"), .localized("Semi Local")]
 	
-	private let _dataService = NBFetchService()
-	private let _serverPackUrl = "https://backloop.dev/pack.json"
 	
 	// MARK: Body
 	var body: some View {
@@ -68,27 +66,40 @@ struct ServerView: View {
 					.disabled(_serverMethod != 1)
 			}
 			
-			Section {
-				Button(.localized("Update SSL Certificates"), systemImage: "arrow.down.doc") {
-					FR.downloadSSLCertificates(from: _serverPackUrl) { success in
-						if success {
-							DispatchQueue.main.async {
-								UIAlertController.showAlertWithOk(
-									title: .localized("SSL Certificates"),
-									message: .localized("Certificates updated successfully.")
-								)
-							}
-						} else {
-							DispatchQueue.main.async {
-								UIAlertController.showAlertWithOk(
-									title: .localized("SSL Certificates"),
-									message: .localized("Failed to download, check your internet connection and try again.")
-								)
-							}
-						}
+			SSLUpdateSection()
+		}
+	}
+}
+
+struct SSLUpdateSection: View {
+	@State private var isUpdating = false
+	@State private var result: Bool?
+	@State private var showResult = false
+	var body: some View {
+		Section {
+			Button {
+				guard !isUpdating else { return }
+				isUpdating = true
+				FR.downloadSSLCertificates(from: "https://backloop.dev/pack.json") { success in
+					DispatchQueue.main.async {
+						isUpdating = false
+						result = success
+						showResult = true
 					}
 				}
+			} label: {
+				HStack {
+					Label(.localized("Update SSL Certificates"), systemImage: "arrow.down.doc")
+					Spacer()
+					if isUpdating { ProgressView() }
+				}
 			}
+			.disabled(isUpdating)
+		} footer: { Text(.localized("SSL update explanation")) }
+		.alert(.localized("SSL Certificates"), isPresented: $showResult) {
+			Button(.localized("OK"), role: .cancel) {}
+		} message: {
+			Text(result == true ? .localized("Certificates updated successfully.") : .localized("Failed to download, check your internet connection and try again."))
 		}
 	}
 }

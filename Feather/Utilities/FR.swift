@@ -6,6 +6,7 @@
 //
 
 import Foundation.NSURL
+import CoreData
 import UIKit.UIImage
 import Zsign
 import NimbleJSON
@@ -44,7 +45,7 @@ enum FR {
 		using options: Options,
 		icon: UIImage?,
 		certificate: CertificatePair?,
-		completion: @escaping (Error?) -> Void
+		completion: @escaping (Error?, Signed?) -> Void
 	) {
 		Task.detached {
 			let handler = SigningHandler(app: app, options: options)
@@ -56,12 +57,15 @@ enum FR {
 				try await handler.modify()
 				try? await handler.clean()
 				await MainActor.run {
-					completion(nil)
+					let request: NSFetchRequest<Signed> = Signed.fetchRequest()
+					request.predicate = NSPredicate(format: "uuid == %@", handler.signedAppUUID)
+					let signed = try? Storage.shared.context.fetch(request).first
+					completion(nil, signed)
 				}
 			} catch {
 				try? await handler.clean()
 				await MainActor.run {
-					completion(error)
+					completion(error, nil)
 				}
 			}
 		}

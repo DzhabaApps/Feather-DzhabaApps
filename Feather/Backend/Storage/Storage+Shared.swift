@@ -52,6 +52,7 @@ struct AnyApp: Identifiable {
 }
 
 protocol AppInfoPresentable {
+	var source: URL? { get }
 	var name: String? { get }
 	var version: String? { get }
 	var identifier: String? { get }

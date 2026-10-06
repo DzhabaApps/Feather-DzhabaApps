@@ -17,7 +17,12 @@ struct FeatherApp: App {
 	let heartbeat = HeartbeatManager.shared
 	
 	@StateObject var downloadManager = DownloadManager.shared
+	@StateObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
 	let storage = Storage.shared
+
+	init() {
+		UserDefaults.standard.set(["ru"], forKey: "AppleLanguages")
+	}
 	
 	var body: some Scene {
 		WindowGroup {
@@ -29,11 +34,29 @@ struct FeatherApp: App {
 					.onOpenURL(perform: _handleURL)
 					.transition(.move(edge: .top).combined(with: .opacity))
 			}
+			.environment(\.locale, Locale(identifier: "ru"))
+			.overlay {
+				if let name = repositoryInstaller.signingName {
+					ZStack {
+						Color.black.opacity(0.25).ignoresSafeArea()
+						VStack(spacing: 16) {
+							ProgressView()
+							Text(.localized("Signing" )).font(.headline)
+							Text(name).font(.subheadline).lineLimit(2)
+						}.padding(28).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20)).padding()
+					}
+				}
+			}
+			.sheet(item: $repositoryInstaller.installApp) { app in
+				InstallPreviewView(app: app.base)
+					.presentationDetents([.height(220)])
+					.presentationDragIndicator(.visible)
+			}
 			.animation(.smooth, value: downloadManager.manualDownloads.description)
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
 				DispatchQueue.main.async {
 					UIAlertController.showAlertWithOk(
-						title: "InvalidHostID",
+						title: .localized("InvalidHostID"),
 						message: .localized("Your pairing file is invalid and is incompatible with your device, please import a valid pairing file.")
 					)
 				}
@@ -50,7 +73,7 @@ struct FeatherApp: App {
 	}
 	
 	private func _handleURL(_ url: URL) {
-		if url.scheme == "feather" {
+		if url.scheme == "feather" || url.scheme == "fizer-preview" {
 			/// feather://import-certificate?p12=<base64>&mobileprovision=<base64>&password=<base64>
 			if url.host == "import-certificate" {
 				guard
