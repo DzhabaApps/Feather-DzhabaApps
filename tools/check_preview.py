@@ -31,7 +31,7 @@ if args.ipa:
         app = 'Payload/Feather.app/'
         info = plistlib.loads(ipa.read(app+'Info.plist'))
         assert info['CFBundleIdentifier'] == 'ru.dzhabaapps.fizer.preview'
-        assert info['CFBundleDisplayName'] == 'Физер-тест'
+        assert info['CFBundleDisplayName'] == 'Feather Test'
         schemes = [s for t in info.get('CFBundleURLTypes', []) for s in t.get('CFBundleURLSchemes', [])]
         assert 'fizer-preview' in schemes and 'feather' not in schemes
         assert any(n.startswith(app+'ru.lproj/') for n in ipa.namelist())

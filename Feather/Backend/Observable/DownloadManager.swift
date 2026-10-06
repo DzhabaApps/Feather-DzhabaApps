@@ -29,12 +29,14 @@ class Download: Identifiable, @unchecked Sendable {
 	let url: URL
 	let source: URL
 	let fileName: String
+	let displayName: String
 	let onlyArchiving: Bool
 	
 	init(
 		id: String,
 		url: URL,
 		source: URL? = nil,
+		displayName: String? = nil,
 		onlyArchiving: Bool = false
 	) {
 		self.id = id
@@ -42,6 +44,7 @@ class Download: Identifiable, @unchecked Sendable {
 		self.source = source ?? url
 		self.onlyArchiving = onlyArchiving
 		self.fileName = url.lastPathComponent
+		self.displayName = DownloadPresentation.title(displayName: displayName, url: url)
 	}
 }
 
@@ -77,13 +80,14 @@ class DownloadManager: NSObject, ObservableObject {
 	func startDownload(
 		from url: URL,
 		id: String = UUID().uuidString,
-		source: URL? = nil
+		source: URL? = nil,
+		displayName: String? = nil
 	) -> Download {
 		if let existingDownload = downloads.first(where: { $0.url == url && $0.source == (source ?? url) }) {
 			return existingDownload
 		}
 		
-		let download = Download(id: id, url: url, source: source)
+		let download = Download(id: id, url: url, source: source, displayName: displayName)
 		
 		let task = _session.downloadTask(with: url)
 		download.task = task
@@ -93,7 +97,7 @@ class DownloadManager: NSObject, ObservableObject {
 		
 		#if !targetEnvironment(macCatalyst)
 		if #available(iOS 26.0, *) {
-			BackgroundTaskManager.shared.startTask(for: id, filename: url.lastPathComponent)
+			BackgroundTaskManager.shared.startTask(for: id, filename: download.displayName)
 		} else {
 			_updateBackgroundAudioState()
 		}

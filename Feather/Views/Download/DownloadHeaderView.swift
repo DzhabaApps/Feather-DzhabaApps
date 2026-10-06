@@ -14,16 +14,16 @@ struct DownloadHeaderView: View {
 	
 	var body: some View {
 		ZStack {
-			if !downloadManager.manualDownloads.isEmpty {
+			if !downloadManager.downloads.isEmpty {
 				VStack {
 					VStack(spacing: 12) {
-						if let firstDownload = downloadManager.manualDownloads.first {
+						if let firstDownload = downloadManager.downloads.first {
 							DownloadItemView(download: firstDownload)
 							
-							if downloadManager.manualDownloads.count > 1 {
+							if downloadManager.downloads.count > 1 {
 								HStack {
 									Spacer()
-									Text(verbatim: "+\(downloadManager.manualDownloads.count - 1)")
+									Text(verbatim: "+\(downloadManager.downloads.count - 1)")
 										.font(.caption)
 										.foregroundColor(.secondary)
 										.padding(.vertical, 4)
@@ -36,7 +36,7 @@ struct DownloadHeaderView: View {
 				.transition(.move(edge: .top).combined(with: .opacity))
 			}
 		}
-		.animation(.spring(), value: downloadManager.manualDownloads.count)
+		.animation(.spring(), value: downloadManager.downloads.count)
 	}
 }
 
@@ -49,7 +49,7 @@ struct DownloadItemView: View {
 	
 	var body: some View {
 		VStack(alignment: .leading, spacing: 4) {
-			Text(download.fileName)
+			Text(download.displayName)
 				.font(.subheadline)
 				.lineLimit(1)
 			

@@ -57,7 +57,7 @@ struct FeatherApp: App {
 					.presentationDetents([.height(220)])
 					.presentationDragIndicator(.visible)
 			}
-			.animation(.smooth, value: downloadManager.manualDownloads.description)
+			.animation(.smooth, value: downloadManager.downloads.description)
 			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
 				DispatchQueue.main.async {
 					UIAlertController.showAlertWithOk(
@@ -267,7 +267,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 			for folderURL in folderContents {
 				guard folderURL.hasDirectoryPath else { continue }
 				
-				let certName = folderURL.lastPathComponent
+				let embeddedName = try? String(contentsOf: folderURL.appendingPathComponent("name.txt"), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+				let certName = embeddedName?.isEmpty == false ? embeddedName! : (folderURL.lastPathComponent == "one" ? .localized("My Certificate") : folderURL.lastPathComponent)
 				
 				let p12Url = folderURL.appendingPathComponent("cert.p12")
 				let provisionUrl = folderURL.appendingPathComponent("cert.mobileprovision")

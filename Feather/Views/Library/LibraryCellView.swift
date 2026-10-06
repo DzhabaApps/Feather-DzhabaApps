@@ -13,6 +13,7 @@ import NimbleViews
 struct LibraryCellView: View {
 	@Environment(\.horizontalSizeClass) private var horizontalSizeClass
 	@Environment(\.editMode) private var editMode
+	@ObservedObject private var installer = RepositoryInstallCoordinator.shared
 
 	var certInfo: Date.ExpirationInfo? {
 		Storage.shared.getCertificate(from: app)?.expiration?.expirationInfo()
@@ -136,7 +137,7 @@ extension LibraryCellView {
 				}
 			}
 			Button(.localized("Install"), systemImage: "square.and.arrow.down") {
-				selectedInstallAppPresenting = AnyApp(base: app)
+				installer.install(app)
 			}
 			Button(.localized("Re-sign"), systemImage: "signature") {
 				selectedSigningAppPresenting = AnyApp(base: app)
@@ -146,7 +147,7 @@ extension LibraryCellView {
 			}
 		} else {
 			Button(.localized("Install"), systemImage: "square.and.arrow.down") {
-				selectedInstallAppPresenting = AnyApp(base: app)
+				installer.install(app)
 			}
 			Button(.localized("Sign"), systemImage: "signature") {
 				selectedSigningAppPresenting = AnyApp(base: app)
@@ -156,29 +157,15 @@ extension LibraryCellView {
 	
 	@ViewBuilder
 	private func _buttonActions(for app: AppInfoPresentable) -> some View {
-		Group {
-			if app.isSigned {
-				Button {
-					selectedInstallAppPresenting = AnyApp(base: app)
-				} label: {
-					FRExpirationPillView(
-						title: .localized("Install"),
-						revoked: certRevoked,
-						expiration: certInfo
-					)
-				}
-			} else {
-				Button {
-					selectedSigningAppPresenting = AnyApp(base: app)
-				} label: {
-					FRExpirationPillView(
-						title: .localized("Sign"),
-						revoked: false,
-						expiration: nil
-					)
-				}
-			}
+		Button {
+			installer.install(app)
+		} label: {
+			Text(.localized("Install"))
+				.font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.8)
+				.padding(.horizontal, 12).padding(.vertical, 8)
+				.background(Color(uiColor: .quaternarySystemFill)).clipShape(Capsule())
 		}
 		.buttonStyle(.borderless)
+		.disabled(installer.isBusy)
 	}
 }

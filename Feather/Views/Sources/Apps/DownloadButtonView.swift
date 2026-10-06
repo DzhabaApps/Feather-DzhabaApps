@@ -46,7 +46,7 @@ struct DownloadButtonView: View {
 					if let downloaded {
 						installer.install(downloaded)
 					} else if let url = app.currentDownloadUrl, let source {
-						_ = downloadManager.startDownload(from: url, id: source.absoluteString, source: source)
+						_ = downloadManager.startDownload(from: url, id: source.absoluteString, source: source, displayName: app.name)
 					}
 				} label: {
 					Text(.localized(downloaded == nil ? "Download" : "Install"))

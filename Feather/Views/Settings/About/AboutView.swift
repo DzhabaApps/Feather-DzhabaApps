@@ -7,7 +7,7 @@ struct AboutView: View {
 			Section {
 				VStack(spacing: 8) {
 					FRAppIconView(size: 72)
-					Text("Физер").font(.largeTitle.bold())
+					Text("Feather").font(.largeTitle.bold())
 					Text(verbatim: .localized("Version %@", arguments: Bundle.main.version)).foregroundStyle(.secondary)
 				}.frame(maxWidth: .infinity)
 			}
