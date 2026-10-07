@@ -15,6 +15,7 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
     private var cache: Cache?
     private var refreshing = false
     private var nextAttempt: TimeInterval = 0
+    private var nextBackgroundRefresh: TimeInterval = 0
     private var timer: AnyCancellable?
     private let endpoint = URL(string: "https://dzhabaapps.ru/api/feather/access/lease")!
     private static let processIdentity = UUID().uuidString
@@ -38,7 +39,10 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.publish()
-            self.timer = Timer.publish(every: 15, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.publish() }
+            self.timer = Timer.publish(every: 15, on: .main, in: .common).autoconnect().sink { [weak self] _ in
+                self?.publish()
+                self?.refreshIfDue()
+            }
         }
     }
 
@@ -97,12 +101,23 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
         guard !refreshing, force || Self.tick() >= nextAttempt else { return false }
         refreshing = true
         nextAttempt = Self.tick() + 60
+        nextBackgroundRefresh = Self.tick() + 300
         return true
+    }
+
+    private func refreshIfDue() {
+        lock.lock()
+        let due = configuration != nil && !refreshing && Self.tick() >= nextBackgroundRefresh
+        lock.unlock()
+        if due { Task { await self.refresh() } }
     }
 
     private func finishRefresh(_ newCache: Cache?) {
         lock.lock()
-        if let newCache { cache = newCache }
+        if let newCache {
+            cache = newCache
+            nextBackgroundRefresh = Self.tick() + 3600
+        }
         refreshing = false
         lock.unlock()
         if let newCache, let data = try? JSONEncoder().encode(newCache) { writeKeychain(data) }

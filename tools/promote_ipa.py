@@ -11,7 +11,7 @@ import plistlib
 import zipfile
 
 
-def promote(source: pathlib.Path, destination: pathlib.Path) -> None:
+def promote(source: pathlib.Path, destination: pathlib.Path, *, version: str = '2.9.0', commit: str = '691201c06a2b05acaf79a1ea6a6040b447ac36ac') -> None:
     assert source.resolve() != destination.resolve()
     metadata_path = 'Payload/Feather.app/Info.plist'
     with zipfile.ZipFile(source) as original:
@@ -19,8 +19,8 @@ def promote(source: pathlib.Path, destination: pathlib.Path) -> None:
         info = plistlib.loads(original.read(metadata_path))
         assert info['CFBundleIdentifier'] == 'ru.dzhabaapps.fizer.preview'
         assert info['CFBundleDisplayName'] == 'Feather Test'
-        assert info['CFBundleShortVersionString'] == '2.9.0'
-        assert info['CFBundleVersion'] == '691201c06a2b05acaf79a1ea6a6040b447ac36ac'
+        assert info['CFBundleShortVersionString'] == version
+        assert info['CFBundleVersion'] == commit
         assert not any('signing-assets/' in n for n in original.namelist())
         info['CFBundleIdentifier'] = 'thewonderofyou.Feather'
         info['CFBundleDisplayName'] = 'Feather'
@@ -46,5 +46,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=pathlib.Path)
     parser.add_argument('destination', type=pathlib.Path)
+    parser.add_argument('--version', default='2.9.0')
+    parser.add_argument('--commit', default='691201c06a2b05acaf79a1ea6a6040b447ac36ac')
     args = parser.parse_args()
-    promote(args.source, args.destination)
+    promote(args.source, args.destination, version=args.version, commit=args.commit)
