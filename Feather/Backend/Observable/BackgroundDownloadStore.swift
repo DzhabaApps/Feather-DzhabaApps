@@ -7,6 +7,7 @@ struct BackgroundDownloadRecord: Codable {
     let url: URL
     let source: URL
     let displayName: String
+    var attempt: UUID? = nil
 }
 
 final class BackgroundDownloadStore {

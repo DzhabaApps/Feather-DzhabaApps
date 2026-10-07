@@ -6,7 +6,12 @@ let store = BackgroundDownloadStore(root: root.appendingPathComponent("persisten
 let url = URL(string: "https://example.org/app.ipa?token=fixture")!
 let first = BackgroundDownloadRecord(token: UUID(), id: "source/version?not-a-path", url: url, source: url, displayName: "Приложение")
 let second = BackgroundDownloadRecord(token: UUID(), id: "second", url: url, source: url, displayName: "Другое")
+var newAttempt = first
+newAttempt.attempt = UUID()
 try store.save(first); try store.save(second)
+try store.save(newAttempt)
+assert(store.records().first { $0.id == first.id }?.attempt == newAttempt.attempt)
+assert(store.records().first { $0.id == first.id }?.attempt != first.attempt)
 assert(store.records().count == 2)
 assert(!store.isReady(first))
 let systemTemp = root.appendingPathComponent("system-temp.ipa")

@@ -134,10 +134,20 @@ class DownloadManager: NSObject, ObservableObject {
     }
 
     private func beginTask(_ download: Download, record: BackgroundDownloadRecord) {
-        let task = _session.downloadTask(with: record.url)
-        task.taskDescription = String(data: try! JSONEncoder().encode(record), encoding: .utf8)
-        download.task = task
-        task.resume()
+        var attempt = record
+        attempt.attempt = UUID()
+        do {
+            let description = try JSONEncoder().encode(attempt)
+            try store.save(attempt)
+            records[download.id] = attempt
+            let task = _session.downloadTask(with: attempt.url)
+            task.taskDescription = String(data: description, encoding: .utf8)
+            download.task = task
+            task.resume()
+        } catch {
+            finish(download)
+            reportError("Не удалось сохранить загрузку. Освободите место и попробуйте снова.")
+        }
     }
 
     func startArchive(from url: URL, id: String = UUID().uuidString) -> Download {
@@ -170,11 +180,11 @@ class DownloadManager: NSObject, ObservableObject {
         guard let description = task.taskDescription, let data = description.data(using: .utf8),
               let record = try? JSONDecoder().decode(BackgroundDownloadRecord.self, from: data) else { return nil }
         if let existing = getDownload(by: record.id) {
-            guard records[record.id]?.token == record.token else { return nil }
+            guard records[record.id]?.token == record.token, records[record.id]?.attempt == record.attempt else { return nil }
             existing.task = task; return existing
         }
         // Ignore events from a cancelled task whose record has already been deleted.
-        guard store.records().contains(where: { $0.token == record.token }) else { return nil }
+        guard store.records().contains(where: { $0.token == record.token && $0.attempt == record.attempt }) else { return nil }
         let download = Download(id: record.id, url: record.url, source: record.source, displayName: record.displayName)
         download.task = task
         records[record.id] = record
