@@ -256,10 +256,15 @@ extension DownloadManager: URLSessionDownloadDelegate {
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error, let task = task as? URLSessionDownloadTask, let download = restore(task) else { return }
-        finish(download)
-        if (error as NSError).code != NSURLErrorCancelled {
-            reportError("Не удалось скачать приложение. Проверьте интернет и попробуйте снова. " + error.localizedDescription)
+        if (error as NSError).code == NSURLErrorCancelled {
+            // Explicit Cancel removed the record already. A surviving record means iOS cancelled
+            // the transfer (for example after force-quit); keep the user's intent for relaunch.
+            download.task = nil
+            processReadyDownloads()
+            return
         }
+        finish(download)
+        reportError("Не удалось скачать приложение. Проверьте интернет и попробуйте снова. " + error.localizedDescription)
     }
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         let completion = backgroundCompletion
