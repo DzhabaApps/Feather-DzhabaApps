@@ -68,14 +68,6 @@ struct FeatherApp: App {
 					.presentationDragIndicator(.visible)
 			}
 			.animation(.smooth, value: downloadManager.downloads.description)
-			.onReceive(NotificationCenter.default.publisher(for: .heartbeatInvalidHost)) { _ in
-				DispatchQueue.main.async {
-					UIAlertController.showAlertWithOk(
-						title: .localized("InvalidHostID"),
-						message: .localized("Your pairing file is invalid and is incompatible with your device, please import a valid pairing file.")
-					)
-				}
-			}
 			// dear god help me
 			.onAppear {
 				if let style = UIUserInterfaceStyle(rawValue: UserDefaults.standard.integer(forKey: "Feather.userInterfaceStyle")) {
@@ -93,7 +85,12 @@ struct FeatherApp: App {
 		switch screen {
 		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
-		case "store": SourcesView(previewCategory: .all)
+		case "library": LibraryView().onAppear { PreviewLibraryChecks.seedReadyApp() }
+        case "cache-check": LibraryView().task { await PreviewLibraryChecks.clearAndCheck() }
+        case "background-transfer": LibraryView().onAppear { DownloadManager.shared.startPreviewTransfer() }
+        case "store-news": SourcesView(previewCategory: .all, previewNews: true)
+        case "app-detail": CatalogDetailPreview()
+        case "store": SourcesView(previewCategory: .all)
 		case "store-finance": SourcesView(previewCategory: .finance)
 		case "store-social": SourcesView(previewCategory: .social)
 		case "store-games": SourcesView(previewCategory: .games)
@@ -107,72 +104,6 @@ struct FeatherApp: App {
 	private func _handleURL(_ url: URL) {
 		guard access.permitsAccess() else { return }
 		if url.scheme == "feather" || url.scheme == "fizer-preview" {
-			/// feather://import-certificate?p12=<base64>&mobileprovision=<base64>&password=<base64>
-			if url.host == "import-certificate" {
-				guard
-					let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-					let queryItems = components.queryItems
-				else {
-					return
-				}
-				
-				func queryValue(_ name: String) -> String? {
-					queryItems.first(where: { $0.name == name })?.value?.removingPercentEncoding
-				}
-				
-				guard
-					let p12Base64 = queryValue("p12"),
-					let provisionBase64 = queryValue("mobileprovision"),
-					let passwordBase64 = queryValue("password"),
-					let passwordData = Data(base64Encoded: passwordBase64),
-					let password = String(data: passwordData, encoding: .utf8)
-				else {
-					return
-				}
-				
-				let generator = UINotificationFeedbackGenerator()
-				generator.prepare()
-				
-				guard
-					let p12URL = FileManager.default.decodeAndWrite(base64: p12Base64, pathComponent: ".p12"),
-					let provisionURL = FileManager.default.decodeAndWrite(base64: provisionBase64, pathComponent: ".mobileprovision"),
-					FR.checkPasswordForCertificate(for: p12URL, with: password, using: provisionURL)
-				else {
-					generator.notificationOccurred(.error)
-					return
-				}
-				
-				FR.handleCertificateFiles(
-					p12URL: p12URL,
-					provisionURL: provisionURL,
-					p12Password: password
-				) { error in
-					if let error = error {
-						UIAlertController.showAlertWithOk(title: .localized("Error"), message: error.localizedDescription)
-					} else {
-						generator.notificationOccurred(.success)
-					}
-				}
-				
-				return
-			}
-			/// feather://export-certificate?callback_template=<template>
-			/// ?callback_template=: This is how we callback to the application requesting the certificate, this will be a url scheme
-			/// 	example: livecontainer%3A%2F%2Fcertificate%3Fcert%3D%24%28BASE64_CERT%29%26password%3D%24%28PASSWORD%29
-			/// 	decoded: livecontainer://certificate?cert=$(BASE64_CERT)&password=$(PASSWORD)
-			/// $(BASE64_CERT) and $(PASSWORD) must be presenting in the callback template so we can replace them with the proper content
-			if url.host == "export-certificate" {
-				guard
-					let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-				else {
-					return
-				}
-				
-				let queryItems = components.queryItems?.reduce(into: [String: String]()) { $0[$1.name.lowercased()] = $1.value } ?? [:]
-				guard let callbackTemplate = queryItems["callback_template"]?.removingPercentEncoding else { return }
-				
-				FR.exportCertificateAndOpenUrl(using: callbackTemplate)
-			}
 			/// feather://install/<url.ipa>
 			if
 				let fullPath = url.validatedScheme(after: "/install/"),
@@ -196,13 +127,16 @@ struct FeatherApp: App {
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+        guard identifier == DownloadManager.backgroundIdentifier else { completionHandler(); return }
+        DownloadManager.shared.handleBackgroundEvents(completion: completionHandler)
+    }
 	func application(
 		_ application: UIApplication,
 		didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
 	) -> Bool {
 		_createPipeline()
 		_createDocumentsDirectories()
-		ResetView.clearWorkCache()
 		_addDefaultCertificates()
 		return true
 	}

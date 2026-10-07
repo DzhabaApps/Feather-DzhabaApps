@@ -7,9 +7,9 @@ struct SourcesView: View {
     @State private var category: CatalogCategory
     @State private var search = ""
     private let preview: Bool
-    init(previewCategory: CatalogCategory? = nil) {
+    init(previewCategory: CatalogCategory? = nil, previewNews: Bool = false) {
         preview = previewCategory != nil
-        _catalog = StateObject(wrappedValue: DzhabaCatalogModel(preview: previewCategory != nil))
+        _catalog = StateObject(wrappedValue: DzhabaCatalogModel(preview: previewCategory != nil, previewNews: previewNews))
         _category = State(initialValue: previewCategory ?? .all)
     }
     private var apps: [ASRepository.App] {
@@ -22,18 +22,15 @@ struct SourcesView: View {
         }
     }
     var body: some View {
-        NBNavigationView("Магазин") {
+        NBNavigationView("Магазин приложений", displayMode: .inline) {
             List {
-                Section {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("DzhabaApps").font(.largeTitle.bold())
-                        Text("Приложения для вашего iPhone").foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 8) {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                ForEach(CatalogCategory.allCases) { item in
+                            HStack(spacing: 6) {
+                                ForEach(CatalogCategory.storeFilters) { item in
                                     Button { category = item } label: {
                                         Label(item.title, systemImage: item.icon)
-                                            .font(.subheadline.weight(.semibold)).padding(.horizontal, 14).padding(.vertical, 10)
+                                            .font(.subheadline.weight(.semibold)).padding(.horizontal, 12).padding(.vertical, 8)
                                             .foregroundStyle(category == item ? Color.white : Color.primary)
                                             .background(category == item ? Color.accentColor : Color(UIColor.secondarySystemBackground), in: Capsule())
                                     }.buttonStyle(.plain)
@@ -41,8 +38,9 @@ struct SourcesView: View {
                                 }
                             }
                         }
-                    }.padding(.vertical, 8)
-                }.listRowSeparator(.hidden)
+                    }.padding(.vertical, 2)
+                     .listRowSeparator(.hidden)
+                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 if let message = catalog.error {
                     Section {
                         VStack(alignment: .leading, spacing: 10) {
@@ -52,7 +50,11 @@ struct SourcesView: View {
                     }
                 }
                 if let source = catalog.repository {
-                    Section {
+                    if let news = source.news, !news.isEmpty {
+                        SourceNewsView(news: news)
+                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+                            .listRowSeparator(.hidden)
+                    }
                         ForEach(apps, id: \.currentUniqueId) { app in
                             HStack(spacing: 12) {
                                 NavigationLink {
@@ -61,9 +63,8 @@ struct SourcesView: View {
                                     FRIconCellView(title: app.currentName, subtitle: SourceAppsCellView.appDescription(app: app), iconUrl: app.iconURL)
                                 }.buttonStyle(.plain)
                                 DownloadButtonView(app: app)
-                            }.padding(.vertical, 5)
+                            }.padding(.vertical, 2)
                         }
-                    } header: { Text("\(category.title) · \(apps.count)") }
                     if apps.isEmpty {
                         VStack(spacing: 12) {
                             Image(systemName: search.isEmpty ? category.icon : "magnifyingglass").font(.largeTitle)
@@ -77,7 +78,9 @@ struct SourcesView: View {
                 }
             }
             .listStyle(.plain)
-            .searchable(text: $search, prompt: "Поиск приложений")
+            .environment(\.defaultMinListHeaderHeight, 0)
+            .environment(\.defaultMinListRowHeight, 44)
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Поиск приложений")
             .refreshable { if !preview { await catalog.load() } }
             .toolbar { if catalog.isLoading && catalog.repository != nil { ProgressView() } }
         }

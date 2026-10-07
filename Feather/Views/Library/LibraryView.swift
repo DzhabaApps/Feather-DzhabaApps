@@ -14,7 +14,6 @@ struct LibraryView: View {
 	@StateObject var downloadManager = DownloadManager.shared
 	
 	@State private var _selectedInfoAppPresenting: AnyApp?
-	@State private var _selectedSigningAppPresenting: AnyApp?
 	@State private var _selectedInstallAppPresenting: AnyApp?
 	@State private var _isImportingPresenting = false
 	@State private var _isDownloadingPresenting = false
@@ -24,7 +23,12 @@ struct LibraryView: View {
 	@State private var _selectedAppUUIDs: Set<String> = []
 	@State private var _editMode: EditMode = .inactive
 	
-	@State private var _searchText = ""
+	@State private var _showCacheConfirmation = false
+    @State private var _cacheError: String?
+    @State private var _showCacheError = false
+    @ObservedObject private var installer = RepositoryInstallCoordinator.shared
+    private var canClearCache: Bool { !downloadManager.isRestoring && downloadManager.downloads.isEmpty && !installer.isBusy }
+    @State private var _searchText = ""
 	@State private var _selectedScope: Scope = .all
 	
 	
@@ -63,19 +67,27 @@ struct LibraryView: View {
 	var body: some View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
+                Section {
+                    Button("Очистить кэш", systemImage: "trash") { _showCacheConfirmation = true }
+                        .disabled(!canClearCache)
+                } footer: {
+                    Text("Удаляет скачанные файлы из Fizer. Установленные на iPhone приложения останутся.")
+                }
+                if _filteredSignedApps.isEmpty && _filteredImportedApps.isEmpty {
+                    Text(_searchText.isEmpty ? "Скачайте приложение из магазина — оно появится здесь." : "Ничего не найдено")
+                        .foregroundStyle(.secondary)
+                }
 				if
 					!_filteredSignedApps.isEmpty,
 					_selectedScope == .all || _selectedScope == .signed
 				{
 					NBSection(
-						.localized("Signed"),
-						secondary: _filteredSignedApps.count.description
+						"Готовые к установке"
 					) {
 						ForEach(_filteredSignedApps, id: \.uuid) { app in
 							LibraryCellView(
 								app: app,
 								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
 								selectedAppUUIDs: $_selectedAppUUIDs
 							)
@@ -89,14 +101,12 @@ struct LibraryView: View {
 					_selectedScope == .all || _selectedScope == .imported
 				{
 					NBSection(
-						.localized("Imported"),
-						secondary: _filteredImportedApps.count.description
+						"Скачанные"
 					) {
 						ForEach(_filteredImportedApps, id: \.uuid) { app in
 							LibraryCellView(
 								app: app,
 								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
 								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
 								selectedAppUUIDs: $_selectedAppUUIDs
 							)
@@ -112,26 +122,7 @@ struct LibraryView: View {
 				}
 			}
 			.scrollDismissesKeyboard(.interactively)
-			.overlay {
-				if
-					_filteredSignedApps.isEmpty,
-					_filteredImportedApps.isEmpty
-				{
-					if #available(iOS 17, *) {
-						ContentUnavailableView {
-							Label(.localized("No Apps"), systemImage: "questionmark.app.fill")
-						} description: {
-							Text(.localized("Get started by importing your first IPA file."))
-						} actions: {
-							Menu {
-								_importActions()
-							} label: {
-								NBButton(.localized("Import"), style: .text)
-							}
-						}
-					}
-				}
-			}
+
 			.toolbar {
 				ToolbarItem(placement: .topBarLeading) {
 					EditButton()
@@ -164,10 +155,7 @@ struct LibraryView: View {
 					.presentationDetents([.height(200)])
 					.presentationDragIndicator(.visible)
 			}
-			.fullScreenCover(item: $_selectedSigningAppPresenting) { app in
-				SigningView(app: app.base)
-					.compatNavigationTransition(id: app.base.uuid ?? "", ns: _namespace)
-			}
+
 			.sheet(isPresented: $_isImportingPresenting) {
 				FileImporterRepresentableView(
 					allowedContentTypes:  [.ipa, .tipa],
@@ -184,6 +172,14 @@ struct LibraryView: View {
 				)
 				.ignoresSafeArea()
 			}
+            .confirmationDialog("Очистить кэш?", isPresented: $_showCacheConfirmation, titleVisibility: .visible) {
+                Button("Удалить скачанные файлы", role: .destructive) {
+                    guard canClearCache else { return }
+                    do { try Storage.shared.clearDownloadedApps(); ResetView.clearWorkCache(); ResetView.clearNetworkCache() }
+                    catch { _cacheError = "Не удалось удалить все файлы. Попробуйте снова."; _showCacheError = true }
+                }
+            } message: { Text("Файлы в библиотеке Fizer будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
+            .alert("Очистка кэша", isPresented: $_showCacheError) { Button("OK", role: .cancel) {} } message: { Text(_cacheError ?? "") }
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
 				TextField(.localized("URL"), text: $_alertDownloadString)
 					.textInputAutocapitalization(.never)
@@ -265,8 +261,8 @@ extension LibraryView {
 		var displayName: String {
 			switch self {
 			case .all: return .localized("All")
-			case .signed: return .localized("Signed")
-			case .imported: return .localized("Imported")
+			case .signed: return "Готовые к установке"
+			case .imported: return "Скачанные"
 			}
 		}
 	}

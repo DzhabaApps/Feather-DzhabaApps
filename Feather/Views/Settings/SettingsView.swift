@@ -1,4 +1,4 @@
-// DzhabaApps: compact settings; advanced signing tools remain available.
+// Fizer: subscription and ordinary user settings; installation credentials stay internal.
 import SwiftUI
 import NimbleViews
 
@@ -42,7 +42,7 @@ struct SettingsView: View {
 				}
 				Section {
 					NavigationLink(destination: AdvancedSettingsView()) {
-						Label(.localized("Advanced"), systemImage: "slider.horizontal.3")
+						Label("Оформление", systemImage: "paintbrush")
 					}
 					NavigationLink(destination: AboutView()) {
 						Label(.localized("About"), systemImage: "info.circle")
@@ -54,43 +54,27 @@ struct SettingsView: View {
 }
 
 struct InstallationPreferencesView: View {
-	@StateObject private var manager = OptionsManager.shared
-	var body: some View {
-		NBList(.localized("Installation")) {
-			Section {
-				Toggle(.localized("Install After Signing"), isOn: $manager.options.post_installAppAfterSigned)
-				Toggle(.localized("Delete After Signing"), isOn: $manager.options.post_deleteAppAfterSigned)
-			} footer: { Text(.localized("Signing cleanup explanation")) }
-			Section {
-				NavigationLink(destination: InstallationView()) {
-					Label(.localized("Advanced installation settings"), systemImage: "slider.horizontal.3")
-				}
-			}
-		}
-		.onChange(of: manager.options) { _ in manager.saveOptions() }
-	}
+    @StateObject private var manager = OptionsManager.shared
+    var body: some View {
+        NBList("Установка") {
+            Section {
+                Toggle("Удалять лишние файлы автоматически", isOn: $manager.options.post_deleteAppAfterSigned)
+            } footer: { Text("После подготовки приложения исходная копия удаляется. Готовый файл остаётся для повторной установки. Все скачанные файлы можно удалить кнопкой «Очистить кэш» в библиотеке.") }
+        }
+        .onChange(of: manager.options) { _ in manager.saveOptions() }
+    }
 }
 
 struct AdvancedSettingsView: View {
-	@State private var currentIcon: String? = UIApplication.shared.alternateIconName
-	var body: some View {
-		NBList(.localized("Advanced")) {
-			Section {
-				NavigationLink(destination: ConfigurationView()) { Label(.localized("Signing Options"), systemImage: "signature") }
-				NavigationLink(destination: InstallationView()) { Label(.localized("Advanced installation settings"), systemImage: "network") }
-				NavigationLink(destination: ArchiveView()) { Label(.localized("Archive & Compression"), systemImage: "archivebox") }
-			} footer: { Text(.localized("Advanced settings explanation")) }
-			Section {
-				NavigationLink(destination: AppearanceView()) { Label(.localized("Appearance"), systemImage: "paintbrush") }
-				NavigationLink(destination: AppIconView(currentIcon: $currentIcon)) { Label(.localized("App Icon"), systemImage: "app.badge") }
-			}
-			Section {
-				Button(.localized("Open Documents"), systemImage: "folder") { UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!) }
-				Button(.localized("Open Archives"), systemImage: "folder") { UIApplication.open(FileManager.default.archives.toSharedDocumentsURL()!) }
-				NavigationLink(destination: ResetView()) { Label(.localized("Reset"), systemImage: "trash") }
-			}
-		}
-	}
+    @State private var currentIcon: String? = UIApplication.shared.alternateIconName
+    var body: some View {
+        NBList("Оформление") {
+            Section {
+                NavigationLink(destination: AppearanceView()) { Label(.localized("Appearance"), systemImage: "paintbrush") }
+                NavigationLink(destination: AppIconView(currentIcon: $currentIcon)) { Label(.localized("App Icon"), systemImage: "app.badge") }
+            }
+        }
+    }
 }
 
 struct StorageSettingsView: View {
@@ -98,7 +82,7 @@ struct StorageSettingsView: View {
 	@State private var showClearConfirmation = false
 	@ObservedObject private var downloads = DownloadManager.shared
 	@ObservedObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
-	private var canClear: Bool { downloads.downloads.isEmpty && repositoryInstaller.signingName == nil && repositoryInstaller.installApp == nil }
+	private var canClear: Bool { !downloads.isRestoring && downloads.downloads.isEmpty && repositoryInstaller.signingName == nil && repositoryInstaller.installApp == nil }
 	var body: some View {
 		NBList(.localized("Storage")) {
 			Section {

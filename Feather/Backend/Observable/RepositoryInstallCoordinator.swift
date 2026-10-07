@@ -60,7 +60,7 @@ final class RepositoryInstallCoordinator: ObservableObject {
 		FR.signPackageFile(app, using: options, icon: nil, certificate: cert) { [weak self] error, signedApp in
 			guard let self else { return }
 			self.signingName = nil
-			if let error { self.showError(error.localizedDescription); return }
+			if error != nil { self.showError("Не удалось подготовить приложение. Попробуйте снова или обратитесь в поддержку через настройки."); return }
 			guard let signedApp else { self.showError(.localized("Signed file not found")); return }
 			guard FeatherAccessManager.shared.permitsAccess() else { return }
 			// Keep the signed copy for install retries even when the imported copy is removed.

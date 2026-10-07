@@ -4,6 +4,7 @@ import os
 import pathlib
 import subprocess
 import time
+from background_preview import exercise
 
 root = pathlib.Path(__file__).resolve().parents[1]
 derived = pathlib.Path('/tmp/FizerSimulator')
@@ -36,7 +37,8 @@ run('xcrun', 'simctl', 'status_bar', device, 'override', '--time', '9:41', '--ba
 run('xcrun', 'simctl', 'ui', device, 'appearance', 'light')
 app = derived/'Build/Products/Release-iphonesimulator/Feather.app'
 run('xcrun', 'simctl', 'install', device, str(app))
-screens = ['settings', 'installation', 'advanced', 'help', 'access-expired', 'access-offline', 'store', 'store-finance', 'store-social', 'store-games']
+container = exercise(root, app, device)
+screens = ['library', 'store-news', 'app-detail', 'settings', 'installation', 'advanced', 'help', 'access-expired', 'access-offline', 'store', 'store-finance', 'store-social', 'store-games']
 for screen in screens:
     subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
     env = os.environ.copy()
@@ -48,3 +50,12 @@ for screen in screens:
     run('xcrun', 'simctl', 'io', device, 'screenshot', str(path))
     assert path.stat().st_size > 10000
 print(f'Native iOS Simulator screenshots: {len(screens)} screens captured')
+
+subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
+env = os.environ.copy(); env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN'] = 'cache-check'
+run('xcrun', 'simctl', 'launch', device, 'ru.dzhabaapps.fizer.preview', env=env)
+result = container/'Documents/cache-test-result.json'
+deadline = time.monotonic()+15
+while time.monotonic()<deadline and not result.exists(): time.sleep(1)
+assert result.exists() and all(json.loads(result.read_text()).values()), 'Native library cleanup lost app files or installation/subscription data'
+print('Native library cleanup: downloaded and prepared apps removed; installation credentials and paid-period marker preserved')

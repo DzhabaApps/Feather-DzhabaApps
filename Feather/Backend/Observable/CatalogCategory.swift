@@ -2,6 +2,7 @@ import Foundation
 
 enum CatalogCategory: String, CaseIterable, Identifiable {
     case all, finance, social, games, utilities, media, education, shopping, other
+    static var storeFilters: [CatalogCategory] { [.all, .finance, .social, .games, .utilities, .media, .other] }
     var id: String { rawValue }
     var title: String {
         switch self {

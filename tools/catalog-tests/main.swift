@@ -8,6 +8,9 @@ assert(CatalogCategory.resolve(bundleID: "unknown", metadata: nil) == .other)
 assert(CatalogCategory.resolve(bundleID: "unknown", metadata: "unrecognized") == .other)
 assert(CatalogCategory.resolve(bundleID: "com.flavorvault.savor", metadata: "utilities") == .utilities)
 assert(CatalogCategory.resolve(bundleID: "new.social", metadata: "Social Networking") == .social)
+assert(!CatalogCategory.storeFilters.contains(.education))
+assert(!CatalogCategory.storeFilters.contains(.shopping))
+assert(CatalogCategory.storeFilters.contains(.all) && CatalogCategory.storeFilters.contains(.games))
 let data = try Data(contentsOf: URL(fileURLWithPath: "Feather/Resources/CatalogPreview.json"))
 let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 let apps = json["apps"] as! [[String: Any]]

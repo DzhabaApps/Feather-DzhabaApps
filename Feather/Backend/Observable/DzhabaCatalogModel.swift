@@ -9,10 +9,15 @@ final class DzhabaCatalogModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
     private let cacheURL = URL.cachesDirectory.appendingPathComponent("dzhabaapps-catalog-v1.json")
-    init(preview: Bool = false) {
+    init(preview: Bool = false, previewNews: Bool = false) {
         let url = preview ? Bundle.main.url(forResource: "CatalogPreview", withExtension: "json") : cacheURL
         if let url, let data = try? Data(contentsOf: url) {
             repository = try? JSONDecoder().decode(ASRepository.self, from: data)
+            if preview && previewNews, let fixture = """
+            [{"identifier":"preview-news","title":"Новости магазина","caption":"Тестовая карточка для проверки расположения новостей над приложениями.","date":"2026-10-08"}]
+            """.data(using: .utf8) {
+                repository?.news = try? JSONDecoder().decode([ASRepository.News].self, from: fixture)
+            }
         }
     }
     func load() async {

@@ -15,17 +15,8 @@ struct LibraryCellView: View {
 	@Environment(\.editMode) private var editMode
 	@ObservedObject private var installer = RepositoryInstallCoordinator.shared
 
-	var certInfo: Date.ExpirationInfo? {
-		Storage.shared.getCertificate(from: app)?.expiration?.expirationInfo()
-	}
-	
-	var certRevoked: Bool {
-		Storage.shared.getCertificate(from: app)?.revoked == true
-	}
-	
 	var app: AppInfoPresentable
 	@Binding var selectedInfoAppPresenting: AnyApp?
-	@Binding var selectedSigningAppPresenting: AnyApp?
 	@Binding var selectedInstallAppPresenting: AnyApp?
 	@Binding var selectedAppUUIDs: Set<String>
 	
@@ -103,8 +94,8 @@ struct LibraryCellView: View {
 	}
 	
 	private var _desc: String {
-		if let version = app.version, let id = app.identifier {
-			return "\(version) • \(id)"
+		if let version = app.version {
+			return version
 		} else {
 			return .localized("Unknown")
 		}
@@ -139,9 +130,7 @@ extension LibraryCellView {
 			Button(.localized("Install"), systemImage: "square.and.arrow.down") {
 				installer.install(app)
 			}
-			Button(.localized("Re-sign"), systemImage: "signature") {
-				selectedSigningAppPresenting = AnyApp(base: app)
-			}
+
 			Button(.localized("Export"), systemImage: "square.and.arrow.up") {
 				selectedInstallAppPresenting = AnyApp(base: app, archive: true)
 			}
@@ -149,9 +138,7 @@ extension LibraryCellView {
 			Button(.localized("Install"), systemImage: "square.and.arrow.down") {
 				installer.install(app)
 			}
-			Button(.localized("Sign"), systemImage: "signature") {
-				selectedSigningAppPresenting = AnyApp(base: app)
-			}
+
 		}
 	}
 	
