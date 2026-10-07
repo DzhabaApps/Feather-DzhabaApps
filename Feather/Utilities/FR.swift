@@ -187,6 +187,10 @@ enum FR {
 	static func exportCertificateAndOpenUrl(using template: String) {
 		// Helper that performs the export for a given certificate
 		func performExport(for certificate: CertificatePair) {
+			guard FeatherAccessManager.shared.permitsAccess(), !certificate.isDefault else {
+				UIAlertController.showAlertWithOk(title: "Feather", message: "Встроенный сертификат используется внутри Feather. Экспорт недоступен.")
+				return
+			}
 			guard
 				let certificateKeyFile = Storage.shared.getFile(.certificate, from: certificate),
 				let certificateKeyFileData = try? Data(contentsOf: certificateKeyFile)

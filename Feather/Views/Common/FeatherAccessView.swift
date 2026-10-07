@@ -2,13 +2,16 @@ import SwiftUI
 
 struct FeatherAccessView: View {
     @ObservedObject var access: FeatherAccessManager
+    var previewState: FeatherAccessState? = nil
+    var previewExpiry: Date? = nil
+    private var currentState: FeatherAccessState { previewState ?? access.state }
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: access.state == .expired ? "clock.badge.exclamationmark" : "wifi.exclamationmark")
+            Image(systemName: currentState == .expired ? "clock.badge.exclamationmark" : "wifi.exclamationmark")
                 .font(.system(size: 52)).foregroundStyle(.secondary)
             Text(title).font(.title2.bold()).multilineTextAlignment(.center)
             Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            if let expiry = access.expiresAt {
+            if let expiry = previewExpiry ?? access.expiresAt {
                 Text("Доступ до \(expiry.formatted(date: .numeric, time: .shortened))")
                     .font(.footnote).foregroundStyle(.secondary)
             }
@@ -23,14 +26,14 @@ struct FeatherAccessView: View {
         .background(Color(UIColor.systemBackground).ignoresSafeArea())
     }
     private var title: String {
-        switch access.state {
+        switch currentState {
         case .expired: return "Срок доступа закончился"
         case .disabled: return "Доступ к этой сборке отключён"
         default: return "Не удалось подтвердить доступ"
         }
     }
     private var message: String {
-        switch access.state {
+        switch currentState {
         case .expired: return "Продлите доступ, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
         case .disabled: return "Откройте актуальную ссылку в боте или обратитесь в поддержку."
         default: return "Для проверки подключитесь к интернету. Если связь не восстановилась, повторите попытку позже."

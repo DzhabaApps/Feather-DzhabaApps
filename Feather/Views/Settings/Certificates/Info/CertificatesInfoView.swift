@@ -34,11 +34,11 @@ struct CertificatesInfoView: View {
 					_miscSection(data: data)
 				}
 				
-				Section {
+				if !cert.isDefault { Section {
 					Button(.localized("Open in Files"), systemImage: "folder") {
 						UIApplication.open(Storage.shared.getUuidDirectory(for: cert)!.toSharedDocumentsURL()!)
 					}
-				}
+				} }
 			}
 			.toolbar {
 				NBToolbarButton(role: .close)

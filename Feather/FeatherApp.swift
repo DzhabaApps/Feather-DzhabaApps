@@ -9,6 +9,7 @@ import SwiftUI
 import Nuke
 import IDeviceSwift
 import OSLog
+import CryptoKit
 
 @main
 struct FeatherApp: App {
@@ -46,7 +47,7 @@ struct FeatherApp: App {
 				if access.state != .active { FeatherAccessView(access: access) }
 			}
 			.task { await access.refresh() }
-			.onChange(of: scenePhase) { _, phase in
+			.onChange(of: scenePhase) { phase in
 				if phase == .active { Task { await access.refresh() } }
 			}
 			.overlay {
@@ -90,6 +91,8 @@ struct FeatherApp: App {
 	@ViewBuilder
 	private func _previewScreen(_ screen: String) -> some View {
 		switch screen {
+		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
+		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
 		case "installation": NavigationStack { InstallationPreferencesView() }
 		case "advanced": NavigationStack { AdvancedSettingsView() }
 		case "help": NavigationStack { FizerHelpView() }
@@ -261,7 +264,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 	private func _addDefaultCertificates() {
 		guard
-			UserDefaults.standard.bool(forKey: "feather.didImportDefaultCertificates") == false,
 			let signingAssetsURL = Bundle.main.url(forResource: "signing-assets", withExtension: nil)
 		else {
 			return
@@ -294,6 +296,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 				}
 				
 				let password = try String(contentsOf: passwordUrl, encoding: .utf8)
+				let digest = SHA256.hash(data: try Data(contentsOf: p12Url) + Data(contentsOf: provisionUrl))
+					.map { String(format: "%02x", $0) }.joined()
+				let digestKey = "feather.defaultCertificateDigest.\(folderURL.lastPathComponent)"
+				if UserDefaults.standard.string(forKey: digestKey) == digest { continue }
 				
 				FR.handleCertificateFiles(
 					p12URL: p12Url,
@@ -301,8 +307,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 					p12Password: password,
 					certificateName: certName,
 					isDefault: true
-				) { _ in
-					
+				) { error in
+					if error == nil {
+						UserDefaults.standard.set(digest, forKey: digestKey)
+						UserDefaults.standard.set(0, forKey: "feather.selectedCert")
+					}
 				}
 			}
 			UserDefaults.standard.set(true, forKey: "feather.didImportDefaultCertificates")

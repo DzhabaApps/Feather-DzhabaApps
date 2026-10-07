@@ -3,6 +3,7 @@ import SwiftUI
 import NimbleViews
 
 struct SettingsView: View {
+	@ObservedObject private var access = FeatherAccessManager.shared
 	@AppStorage("feather.selectedCert") private var selectedCert: Int = 0
 	@FetchRequest(entity: CertificatePair.entity(),
 		sortDescriptors: [NSSortDescriptor(keyPath: \CertificatePair.date, ascending: false)],
@@ -11,6 +12,14 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
+				Section("Доступ к Feather") {
+					if let expiry = access.expiresAt {
+						LabeledContent("Действует до", value: expiry.formatted(date: .numeric, time: .shortened))
+					}
+					Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+				} footer: {
+					Text("Восстановление доступа входит в оплаченный период.")
+				}
 				NBSection(.localized("Certificate")) {
 					if certificates.indices.contains(selectedCert) {
 						CertificatesCellView(cert: certificates[selectedCert])
