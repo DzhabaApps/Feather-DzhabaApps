@@ -42,7 +42,8 @@ for screen in screens:
     env = os.environ.copy()
     env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN'] = screen
     run('xcrun', 'simctl', 'launch', device, 'ru.dzhabaapps.fizer.preview', env=env)
-    time.sleep(5)
+    # Let the simulator's first-launch system notification disappear before QA.
+    time.sleep(15 if screen == 'settings' else 5)
     path = output/f'Fizer-{screen}.png'
     run('xcrun', 'simctl', 'io', device, 'screenshot', str(path))
     assert path.stat().st_size > 10000

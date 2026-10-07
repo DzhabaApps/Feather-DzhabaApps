@@ -53,7 +53,7 @@ struct SourcesView: View {
                 }
                 if let source = catalog.repository {
                     Section {
-                        ForEach(Array(apps.enumerated()), id: \.offset) { _, app in
+                        ForEach(apps, id: \.currentUniqueId) { app in
                             HStack(spacing: 12) {
                                 NavigationLink {
                                     SourceAppsDetailView(source: source, app: app)
