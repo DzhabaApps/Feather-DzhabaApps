@@ -66,7 +66,6 @@ struct ServerView: View {
 					.disabled(_serverMethod != 1)
 			}
 			
-			SSLUpdateSection()
 		}
 	}
 }
@@ -89,17 +88,17 @@ struct SSLUpdateSection: View {
 				}
 			} label: {
 				HStack {
-					Label(.localized("Update SSL Certificates"), systemImage: "arrow.down.doc")
+					Label("Исправить установку приложений", systemImage: "arrow.triangle.2.circlepath")
 					Spacer()
 					if isUpdating { ProgressView() }
 				}
 			}
 			.disabled(isUpdating)
-		} footer: { Text(.localized("SSL update explanation")) }
-		.alert(.localized("SSL Certificates"), isPresented: $showResult) {
+		} footer: { Text("Если подписанное приложение не устанавливается, нажмите здесь, затем повторите установку. Нужен интернет. Если это не помогло, обратитесь в поддержку.") }
+		.alert("Установка приложений", isPresented: $showResult) {
 			Button(.localized("OK"), role: .cancel) {}
 		} message: {
-			Text(result == true ? .localized("Certificates updated successfully.") : .localized("Failed to download, check your internet connection and try again."))
+			Text(result == true ? "Данные для установки обновлены. Попробуйте установить приложение ещё раз." : "Не удалось обновить данные. Проверьте интернет и повторите попытку.")
 		}
 	}
 }

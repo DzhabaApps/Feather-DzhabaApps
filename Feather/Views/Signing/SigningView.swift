@@ -192,16 +192,10 @@ extension SigningView {
 	@ViewBuilder
 	private func _cert() -> some View {
 		NBSection(.localized("Signing")) {
-			if let cert = _selectedCert() {
-				NavigationLink {
-					CertificatesView(selectedCert: $_temporaryCertificate)
-				} label: {
-					CertificatesCellView(
-						cert: cert
-					)
-				}
+			if _selectedCert() != nil {
+				Label("Всё готово к подписи", systemImage: "checkmark.seal")
 			} else {
-				Text(.localized("No Certificate"))
+				Text("Не удалось подготовить подпись. Обратитесь в поддержку через настройки.")
 					.font(.footnote)
 					.foregroundColor(.disabled())
 			}

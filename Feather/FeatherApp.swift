@@ -93,10 +93,14 @@ struct FeatherApp: App {
 		switch screen {
 		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
+		case "store": SourcesView(previewCategory: .all)
+		case "store-finance": SourcesView(previewCategory: .finance)
+		case "store-social": SourcesView(previewCategory: .social)
+		case "store-games": SourcesView(previewCategory: .games)
 		case "installation": NavigationStack { InstallationPreferencesView() }
 		case "advanced": NavigationStack { AdvancedSettingsView() }
 		case "help": NavigationStack { FizerHelpView() }
-		default: SettingsView()
+		default: SettingsView(previewState: .active, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		}
 	}
 	
@@ -169,10 +173,6 @@ struct FeatherApp: App {
 				
 				FR.exportCertificateAndOpenUrl(using: callbackTemplate)
 			}
-			/// feather://source/<url>
-			if let fullPath = url.validatedScheme(after: "/source/") {
-				FR.handleSource(fullPath) { }
-			}
 			/// feather://install/<url.ipa>
 			if
 				let fullPath = url.validatedScheme(after: "/install/"),
@@ -204,7 +204,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		_createDocumentsDirectories()
 		ResetView.clearWorkCache()
 		_addDefaultCertificates()
-		_addDefaultSource()
 		return true
 	}
 	
