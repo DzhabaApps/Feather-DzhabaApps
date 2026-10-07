@@ -35,6 +35,7 @@ final class RepositoryInstallCoordinator: ObservableObject {
 	}
 
 	func install(_ app: AppInfoPresentable) {
+		guard FeatherAccessManager.shared.permitsAccess() else { return }
 		guard !isBusy else { return }
 		if app.isSigned, let cert = Storage.shared.getCertificate(from: app), !cert.revoked, (cert.expiration ?? .distantPast) > .now {
 			installApp = AnyApp(base: app)
@@ -61,6 +62,7 @@ final class RepositoryInstallCoordinator: ObservableObject {
 			self.signingName = nil
 			if let error { self.showError(error.localizedDescription); return }
 			guard let signedApp else { self.showError(.localized("Signed file not found")); return }
+			guard FeatherAccessManager.shared.permitsAccess() else { return }
 			// Keep the signed copy for install retries even when the imported copy is removed.
 			if options.post_deleteAppAfterSigned && !app.isSigned { Storage.shared.deleteApp(for: app) }
 			self.installApp = AnyApp(base: signedApp)

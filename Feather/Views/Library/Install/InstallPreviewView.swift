@@ -136,6 +136,7 @@ struct InstallPreviewView: View {
 	}
 	
 	private func _install() {
+		guard FeatherAccessManager.shared.permitsAccess() else { dismiss(); return }
 		guard isSharing || app.identifier != Bundle.main.bundleIdentifier! || _installationMethod == 1 else {
 			UIAlertController.showAlertWithOk(
 				title: .localized("Install"),
@@ -152,6 +153,7 @@ struct InstallPreviewView: View {
 				let packageUrl = try await handler.archive()
 				
 				if await !isSharing {
+					try FeatherAccessManager.shared.requireAccess()
 					if await _installationMethod == 0 {
 						await MainActor.run {
 							installer.packageUrl = packageUrl

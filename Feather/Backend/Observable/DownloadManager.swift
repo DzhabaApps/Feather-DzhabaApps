@@ -83,6 +83,9 @@ class DownloadManager: NSObject, ObservableObject {
 		source: URL? = nil,
 		displayName: String? = nil
 	) -> Download {
+		guard FeatherAccessManager.shared.permitsAccess() else {
+			return Download(id: id, url: url, source: source, displayName: displayName)
+		}
 		if let existingDownload = downloads.first(where: { $0.url == url && $0.source == (source ?? url) }) {
 			return existingDownload
 		}
@@ -121,6 +124,7 @@ class DownloadManager: NSObject, ObservableObject {
 	}
 	
 	func resumeDownload(_ download: Download) {
+		guard FeatherAccessManager.shared.permitsAccess() else { return }
 		if let resumeData = download.resumeData {
 			let task = _session.downloadTask(withResumeData: resumeData)
 			download.task = task

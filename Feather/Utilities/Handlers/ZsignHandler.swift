@@ -40,6 +40,7 @@ final class ZsignHandler {
 	}
 	
 	func sign() async throws {
+		try FeatherAccessManager.shared.requireAccess()
 		guard let cert = _certificate else {
 			throw SigningFileHandlerError.missingCertifcate
 		}
@@ -58,6 +59,7 @@ final class ZsignHandler {
 	}
 	
 	func adhocSign() async throws {
+		try FeatherAccessManager.shared.requireAccess()
 		let _ = Zsign.sign(
 			appPath: _appUrl.relativePath,
 			entitlementsPath: _options.appEntitlementsFile?.path ?? "",

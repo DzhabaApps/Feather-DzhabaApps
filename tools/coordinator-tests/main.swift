@@ -3,6 +3,12 @@
 import Foundation
 import CoreData
 
+final class FeatherAccessManager {
+    static let shared = FeatherAccessManager()
+    var allowed = true
+    func permitsAccess() -> Bool { allowed }
+}
+
 protocol AppInfoPresentable {
 	var source: URL? { get }
 	var name: String? { get }

@@ -18,6 +18,8 @@ struct FeatherApp: App {
 	
 	@StateObject var downloadManager = DownloadManager.shared
 	@StateObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
+	@StateObject private var access = FeatherAccessManager.shared
+	@Environment(\.scenePhase) private var scenePhase
 	let storage = Storage.shared
 
 	init() {
@@ -40,6 +42,13 @@ struct FeatherApp: App {
 					.transition(.move(edge: .top).combined(with: .opacity))
 			}
 			.environment(\.locale, Locale(identifier: "ru"))
+			.overlay {
+				if access.state != .active { FeatherAccessView(access: access) }
+			}
+			.task { await access.refresh() }
+			.onChange(of: scenePhase) { _, phase in
+				if phase == .active { Task { await access.refresh() } }
+			}
 			.overlay {
 				if let name = repositoryInstaller.signingName {
 					ZStack {
@@ -89,6 +98,7 @@ struct FeatherApp: App {
 	}
 	
 	private func _handleURL(_ url: URL) {
+		guard access.permitsAccess() else { return }
 		if url.scheme == "feather" || url.scheme == "fizer-preview" {
 			/// feather://import-certificate?p12=<base64>&mobileprovision=<base64>&password=<base64>
 			if url.host == "import-certificate" {

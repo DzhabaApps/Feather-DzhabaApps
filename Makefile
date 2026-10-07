@@ -12,6 +12,8 @@ all: verify $(PLATFORMS) preview-screenshots
 
 verify:
 	python3 tools/check_preview.py
+	xcrun swiftc Feather/Backend/Observable/FeatherAccessLease.swift Feather/Backend/Observable/FeatherAccessManager.swift tools/access-tests/main.swift -o /tmp/feather-access-tests
+	/tmp/feather-access-tests
 	xcrun swiftc Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/DownloadPresentation.swift tools/identity-tests/main.swift -o /tmp/fizer-identity-tests
 	/tmp/fizer-identity-tests
 	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/RepositoryInstallCoordinator.swift tools/coordinator-tests/main.swift -o /tmp/fizer-coordinator-tests

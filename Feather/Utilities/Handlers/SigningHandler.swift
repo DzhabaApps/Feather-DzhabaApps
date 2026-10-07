@@ -128,6 +128,7 @@ final class SigningHandler: NSObject {
 	}
 	
 	func move() async throws {
+		try FeatherAccessManager.shared.requireAccess()
 		guard let movedAppPath = _movedAppPath else {
 			throw SigningFileHandlerError.appNotFound
 		}
