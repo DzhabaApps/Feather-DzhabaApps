@@ -12,7 +12,7 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				Section("Доступ к Feather") {
+				NBSection("Доступ к Feather") {
 					if let expiry = access.expiresAt {
 						LabeledContent("Действует до", value: expiry.formatted(date: .numeric, time: .shortened))
 					}
