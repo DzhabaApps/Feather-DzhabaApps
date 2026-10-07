@@ -141,7 +141,7 @@ struct FizerHelpView: View {
 				Button(.localized("Contact support"), systemImage: "message") { UIApplication.open("https://t.me/dzhabaraduev") }
 			}
 			NBSection(.localized("Installation is stuck")) { Text(.localized("Installation troubleshooting")) }
-			NBSection(.localized("Certificate")) { Text(.localized("Certificate troubleshooting")) }
+			NBSection("Подписка и восстановление") { Text(.localized("Certificate troubleshooting")) }
 			NBSection(.localized("Install from repository")) { Text(.localized("Repository installation explanation")) }
 		}
 	}
