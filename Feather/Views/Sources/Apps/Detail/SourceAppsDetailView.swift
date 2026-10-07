@@ -124,9 +124,7 @@ struct SourceAppsDetailView: View {
 							_infoRow(title: .localized("Size"), value: size.formattedByteCount)
 						}
 						
-						if let category = app.category {
-							_infoRow(title: .localized("Category"), value: category.capitalized)
-						}
+						_infoRow(title: .localized("Category"), value: CatalogCategory.resolve(bundleID: app.id, metadata: app.category).title)
 						
 						if let version = app.currentVersion {
 							_infoRow(title: .localized("Version"), value: version)

@@ -12,13 +12,13 @@ struct FeatherAccessView: View {
             Text(title).font(.title2.bold()).multilineTextAlignment(.center)
             Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
             if let expiry = previewExpiry ?? access.expiresAt {
-                Text("Доступ до \(expiry.formatted(date: .numeric, time: .shortened))")
+                Text("Подписка до \(SubscriptionPresentation.expiry(expiry))")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Button { Task { await access.refresh(force: true) } } label: {
                 if access.isChecking { ProgressView() } else { Text("Повторить проверку") }
             }.buttonStyle(.borderedProminent).disabled(access.isChecking)
-            Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+            Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
                 .buttonStyle(.bordered)
             Link("Связаться с поддержкой", destination: URL(string: "https://t.me/dzhabaraduev")!)
         }
@@ -27,14 +27,14 @@ struct FeatherAccessView: View {
     }
     private var title: String {
         switch currentState {
-        case .expired: return "Срок доступа закончился"
+        case .expired: return "Подписка закончилась"
         case .disabled: return "Доступ к этой сборке отключён"
-        default: return "Не удалось подтвердить доступ"
+        default: return "Не удалось проверить подписку"
         }
     }
     private var message: String {
         switch currentState {
-        case .expired: return "Продлите доступ, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
+        case .expired: return "Продлите подписку, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
         case .disabled: return "Откройте актуальную ссылку в боте или обратитесь в поддержку."
         default: return "Для проверки подключитесь к интернету. Если связь не восстановилась, повторите попытку позже."
         }

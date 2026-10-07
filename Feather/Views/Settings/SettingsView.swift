@@ -4,34 +4,31 @@ import NimbleViews
 
 struct SettingsView: View {
 	@ObservedObject private var access = FeatherAccessManager.shared
-	@AppStorage("feather.selectedCert") private var selectedCert: Int = 0
-	@FetchRequest(entity: CertificatePair.entity(),
-		sortDescriptors: [NSSortDescriptor(keyPath: \CertificatePair.date, ascending: false)],
-		animation: .snappy) private var certificates: FetchedResults<CertificatePair>
+	var previewState: FeatherAccessState? = nil
+	var previewExpiry: Date? = nil
+	private var subscriptionStatus: String {
+		switch previewState ?? access.state {
+		case .active: return "Активна"
+		case .expired: return "Закончилась"
+		case .disabled: return "Требуется восстановление"
+		case .verificationRequired: return "Нужна проверка через интернет"
+		}
+	}
 
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				NBSection("Доступ к Feather") {
-					if let expiry = access.expiresAt {
-						LabeledContent("Действует до", value: expiry.formatted(date: .numeric, time: .shortened))
+				NBSection("Подписка") {
+					LabeledContent("Статус", value: subscriptionStatus)
+					if let expiry = previewExpiry ?? access.expiresAt {
+						LabeledContent("Действует до", value: SubscriptionPresentation.expiry(expiry))
 					}
-					Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+					Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+					Link("Поддержка", destination: URL(string: "https://t.me/dzhabaraduev")!)
 				} footer: {
-					Text("Восстановление доступа входит в оплаченный период.")
+					Text("Восстановление входит в оплаченный срок подписки.")
 				}
-				NBSection(.localized("Certificate")) {
-					if certificates.indices.contains(selectedCert) {
-						CertificatesCellView(cert: certificates[selectedCert])
-					} else {
-						Text(.localized("No Certificate")).foregroundStyle(.secondary)
-					}
-					NavigationLink(destination: CertificatesView()) {
-						Label(.localized("Certificates"), systemImage: "checkmark.seal")
-					}
-				} footer: {
-					Text(.localized("Add and manage certificates used for signing applications."))
-				}
+				SSLUpdateSection()
 				Section {
 					NavigationLink(destination: InstallationPreferencesView()) {
 						Label(.localized("Installation"), systemImage: "arrow.down.circle")
@@ -64,7 +61,6 @@ struct InstallationPreferencesView: View {
 				Toggle(.localized("Install After Signing"), isOn: $manager.options.post_installAppAfterSigned)
 				Toggle(.localized("Delete After Signing"), isOn: $manager.options.post_deleteAppAfterSigned)
 			} footer: { Text(.localized("Signing cleanup explanation")) }
-			SSLUpdateSection()
 			Section {
 				NavigationLink(destination: InstallationView()) {
 					Label(.localized("Advanced installation settings"), systemImage: "slider.horizontal.3")
@@ -91,7 +87,6 @@ struct AdvancedSettingsView: View {
 			Section {
 				Button(.localized("Open Documents"), systemImage: "folder") { UIApplication.open(URL.documentsDirectory.toSharedDocumentsURL()!) }
 				Button(.localized("Open Archives"), systemImage: "folder") { UIApplication.open(FileManager.default.archives.toSharedDocumentsURL()!) }
-				Button(.localized("Open Certificates"), systemImage: "folder") { UIApplication.open(FileManager.default.certificates.toSharedDocumentsURL()!) }
 				NavigationLink(destination: ResetView()) { Label(.localized("Reset"), systemImage: "trash") }
 			}
 		}

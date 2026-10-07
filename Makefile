@@ -12,6 +12,8 @@ all: verify $(PLATFORMS) preview-screenshots
 
 verify:
 	python3 tools/check_preview.py
+	xcrun swiftc Feather/Backend/Observable/CatalogCategory.swift tools/catalog-tests/main.swift -o /tmp/feather-catalog-tests
+	/tmp/feather-catalog-tests
 	xcrun swiftc Feather/Backend/Observable/FeatherAccessLease.swift Feather/Backend/Observable/FeatherAccessManager.swift tools/access-tests/main.swift -o /tmp/feather-access-tests
 	/tmp/feather-access-tests
 	xcrun swiftc Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/DownloadPresentation.swift tools/identity-tests/main.swift -o /tmp/fizer-identity-tests

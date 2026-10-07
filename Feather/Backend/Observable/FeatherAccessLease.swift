@@ -67,9 +67,9 @@ enum FeatherAccessError: LocalizedError {
     case invalidResponse, unavailable, expired, disabled
     var errorDescription: String? {
         switch self {
-        case .expired: return "Срок доступа закончился. Продлите доступ в боте."
+        case .expired: return "Подписка закончилась. Продлите подписку в боте."
         case .disabled: return "Доступ к этой сборке отключён. Откройте актуальную ссылку в боте или обратитесь в поддержку."
-        default: return "Не удалось подтвердить доступ. Подключитесь к интернету и повторите проверку."
+        default: return "Не удалось проверить подписку. Подключитесь к интернету и повторите проверку."
         }
     }
 }

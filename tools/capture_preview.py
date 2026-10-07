@@ -36,7 +36,8 @@ run('xcrun', 'simctl', 'status_bar', device, 'override', '--time', '9:41', '--ba
 run('xcrun', 'simctl', 'ui', device, 'appearance', 'light')
 app = derived/'Build/Products/Release-iphonesimulator/Feather.app'
 run('xcrun', 'simctl', 'install', device, str(app))
-for screen in ['settings', 'installation', 'advanced', 'help', 'access-expired', 'access-offline']:
+screens = ['settings', 'installation', 'advanced', 'help', 'access-expired', 'access-offline', 'store', 'store-finance', 'store-social', 'store-games']
+for screen in screens:
     subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
     env = os.environ.copy()
     env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN'] = screen
@@ -45,4 +46,4 @@ for screen in ['settings', 'installation', 'advanced', 'help', 'access-expired',
     path = output/f'Fizer-{screen}.png'
     run('xcrun', 'simctl', 'io', device, 'screenshot', str(path))
     assert path.stat().st_size > 10000
-print('Native iOS Simulator screenshots: 6 screens captured')
+print(f'Native iOS Simulator screenshots: {len(screens)} screens captured')
