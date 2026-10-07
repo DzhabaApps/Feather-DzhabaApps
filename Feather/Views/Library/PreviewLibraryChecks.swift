@@ -29,6 +29,14 @@ enum PreviewLibraryChecks {
             let context = Storage.shared.context
             func count(_ entity: String) throws -> Int { try context.count(for: NSFetchRequest<NSFetchRequestResult>(entityName: entity)) }
             guard try count("Imported") > 0, try count("Signed") > 0 else { throw CocoaError(.fileReadUnknown) }
+            let certificate = CertificatePair(context: context)
+            certificate.uuid = UUID().uuidString
+            certificate.date = .now
+            certificate.expiration = .now.addingTimeInterval(3600)
+            certificate.ppQCheck = false
+            let signed = try context.fetch(Signed.fetchRequest()).first
+            signed?.certificate = certificate
+            try context.save()
             let certificateCount = try count("CertificatePair")
             let marker = FileManager.default.certificates.appendingPathComponent("preview-preservation.txt")
             try Data("synthetic-credential-marker".utf8).write(to: marker)
@@ -36,8 +44,10 @@ enum PreviewLibraryChecks {
             try Storage.shared.clearDownloadedApps()
             result["cleared"] = try count("Imported") == 0 && count("Signed") == 0
             let data = try Data(contentsOf: marker)
-            result["credentialsPreserved"] = try count("CertificatePair") == certificateCount && data == Data("synthetic-credential-marker".utf8) && UserDefaults.standard.string(forKey: "Fizer.CacheTest.Subscription") == "paid-period-marker"
+            result["credentialsPreserved"] = try count("CertificatePair") == certificateCount && !certificate.isDeleted && data == Data("synthetic-credential-marker".utf8) && UserDefaults.standard.string(forKey: "Fizer.CacheTest.Subscription") == "paid-period-marker"
             try FileManager.default.removeItem(at: marker)
+            context.delete(certificate)
+            try context.save()
         } catch { }
         if let data = try? JSONSerialization.data(withJSONObject: result) {
             try? data.write(to: URL.documentsDirectory.appendingPathComponent("cache-test-result.json"), options: .atomic)

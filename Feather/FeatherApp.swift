@@ -46,9 +46,9 @@ struct FeatherApp: App {
 			.overlay {
 				if access.state != .active { FeatherAccessView(access: access) }
 			}
-			.task { await access.refresh() }
+			.task { await access.refresh(); downloadManager.processForegroundDownloads() }
 			.onChange(of: scenePhase) { phase in
-				if phase == .active { Task { await access.refresh() } }
+				if phase == .active { Task { await access.refresh(); downloadManager.processForegroundDownloads() } }
 			}
 			.overlay {
 				if let name = repositoryInstaller.signingName {

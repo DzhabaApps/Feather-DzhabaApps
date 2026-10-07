@@ -188,6 +188,8 @@ class DownloadManager: NSObject, ObservableObject {
         } else { pendingError = message }
     }
 
+    func processForegroundDownloads() { processReadyDownloads() }
+
     private func processReadyDownloads() {
         guard !isRestoring, UIApplication.shared.applicationState == .active else { return }
         if let message = pendingError { pendingError = nil; reportError(message) }
