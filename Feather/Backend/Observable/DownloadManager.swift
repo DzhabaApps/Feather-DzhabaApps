@@ -210,7 +210,7 @@ class DownloadManager: NSObject, ObservableObject {
 }
 
 extension DownloadManager: URLSessionDownloadDelegate {
-    func handlePachageFile(url: URL, dl: Download) throws {
+    func handlePachageFile(url: URL, dl: Download, completion: (() -> Void)? = nil) throws {
         FR.handlePackageFile(url, download: dl) { error in
             if let error { self.reportError(error.localizedDescription) }
             if dl.id == "background-integration", Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" {
@@ -222,6 +222,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             let downloadsRoot = FileManager.default.temporaryDirectory.appendingPathComponent("FeatherDownloads").path + "/"
             if url.path.hasPrefix(downloadsRoot) { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
             self.finish(dl)
+            completion?()
         }
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {

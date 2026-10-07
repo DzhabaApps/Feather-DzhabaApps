@@ -113,12 +113,13 @@ struct FeatherApp: App {
 			}
 		} else {
 			if url.pathExtension == "ipa" || url.pathExtension == "tipa" {
-				if FileManager.default.isFileFromFileProvider(at: url) {
-					guard url.startAccessingSecurityScopedResource() else { return }
-					FR.handlePackageFile(url) { _ in }
-				} else {
-					FR.handlePackageFile(url) { _ in }
-				}
+                let isScoped = FileManager.default.isFileFromFileProvider(at: url)
+                if isScoped && !url.startAccessingSecurityScopedResource() { return }
+                let download = downloadManager.startArchive(from: url, id: "FeatherManualDownload_\(UUID().uuidString)")
+                try? downloadManager.handlePachageFile(url: url, dl: download) {
+                    if isScoped { url.stopAccessingSecurityScopedResource() }
+                }
+
 				
 				return
 			}
