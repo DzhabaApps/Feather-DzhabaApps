@@ -15,10 +15,10 @@ IDENTITY = 'ru.dzhabaapps.fizer.preview'
 def exercise(root, app, device):
     def run(*args, **kwargs):
         return subprocess.run(args, cwd=root, check=True, text=True, **kwargs)
-    # The localhost exception exists only in the installed simulator copy, never in the IPA.
+    # Loopback HTTP is allowed only in the installed simulator copy, never in the IPA.
     info_path = app/'Info.plist'
     info = plistlib.loads(info_path.read_bytes())
-    info.setdefault('NSAppTransportSecurity', {}).setdefault('NSExceptionDomains', {})['localhost'] = {'NSExceptionAllowsInsecureHTTPLoads': True}
+    info.setdefault('NSAppTransportSecurity', {})['NSAllowsArbitraryLoads'] = True
     info_path.write_bytes(plistlib.dumps(info))
     run('xcrun', 'simctl', 'install', device, str(app))
     fixture = io.BytesIO()
@@ -44,16 +44,16 @@ def exercise(root, app, device):
                     self.wfile.write(payload[offset:offset+65536]); self.wfile.flush(); time.sleep(0.5)
                 completed.set()
             except (BrokenPipeError,ConnectionResetError): pass
-    server=http.server.ThreadingHTTPServer(('localhost',0),Handler)
+    server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
-    url=f'http://localhost:{server.server_port}/fixture.ipa'
+    url=f'http://127.0.0.1:{server.server_port}/fixture.ipa'
     container=pathlib.Path(run('xcrun','simctl','get_app_container',device,IDENTITY,'data',capture_output=True).stdout.strip())
     env=os.environ.copy();env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN']='background-transfer';env['SIMCTL_CHILD_FIZER_BACKGROUND_TEST_URL']=url
     try:
         subprocess.run(['xcrun','simctl','terminate',device,IDENTITY],cwd=root,capture_output=True)
         run('xcrun','simctl','launch',device,IDENTITY,env=env)
-        assert started.wait(30), 'Native background session did not start the fixture request'
-        run('xcrun','simctl','openurl',device,f'http://localhost:{server.server_port}/home')
+        assert started.wait(150), 'Native background session did not start the fixture request'
+        run('xcrun','simctl','openurl',device,f'http://127.0.0.1:{server.server_port}/home')
         deadline=time.monotonic()+45
         lifecycle=container/'Documents/background-test-lifecycle.txt'
         received=[]
@@ -74,5 +74,13 @@ def exercise(root, app, device):
         assert result.exists() and json.loads(result.read_text())['imported'] is True, 'Completed package did not recover/import on relaunch'
         print('Native background download: switched to Safari, completed outside app, durable bytes verified, relaunch imported successfully',flush=True)
         return container
+    except Exception:
+        diagnostic=container/'Documents/background-test-diagnostic.txt'
+        print('Background preview diagnostic:',diagnostic.read_text(encoding='utf-8') if diagnostic.exists() else 'No app diagnostic: preview view did not appear',flush=True)
+        records=list((container/'Library/Application Support/FizerDownloads').glob('*.json'))
+        print('Persisted download records:',len(records),flush=True)
+        logs=subprocess.run(['xcrun','simctl','spawn',device,'log','show','--last','4m','--style','compact','--predicate','process == "Feather" AND (eventMessage CONTAINS "error" OR eventMessage CONTAINS "download")'],capture_output=True,text=True)
+        print('Simulator download diagnostics:',logs.stdout[-6000:],flush=True)
+        raise
     finally:
         server.shutdown();server.server_close()

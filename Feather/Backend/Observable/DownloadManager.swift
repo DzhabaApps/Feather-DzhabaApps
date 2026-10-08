@@ -129,8 +129,30 @@ class DownloadManager: NSObject, ObservableObject {
         guard Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview",
               ProcessInfo.processInfo.environment["FIZER_PREVIEW_SCREEN"] == "background-transfer",
               let value = ProcessInfo.processInfo.environment["FIZER_BACKGROUND_TEST_URL"],
-              let url = URL(string: value), url.host == "localhost", url.scheme == "http" else { return }
-        _ = enqueue(Download(id: "background-integration", url: url, displayName: "Фоновая проверка"))
+              let url = URL(string: value), url.host == "127.0.0.1", url.scheme == "http" else { return }
+        previewDiagnostic("preview appeared; state=\(UIApplication.shared.applicationState.rawValue)")
+        Task { @MainActor in
+            // A simctl cold launch can render before the application becomes active.
+            // Starting a background task in that state lets iOS defer it as discretionary.
+            for _ in 0..<120 {
+                if UIApplication.shared.applicationState == .active && !isRestoring { break }
+                try? await Task.sleep(for: .seconds(1))
+            }
+            guard UIApplication.shared.applicationState == .active, !isRestoring else {
+                previewDiagnostic("preview did not become active")
+                return
+            }
+            previewDiagnostic("preview active; enqueue")
+            _ = enqueue(Download(id: "background-integration", url: url, displayName: "Фоновая проверка"))
+        }
+    }
+
+    private func previewDiagnostic(_ message: String) {
+        guard Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview",
+              ProcessInfo.processInfo.environment["FIZER_PREVIEW_SCREEN"] == "background-transfer" else { return }
+        let file = URL.documentsDirectory.appendingPathComponent("background-test-diagnostic.txt")
+        let previous = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        try? Data((previous + message + "\n").utf8).write(to: file, options: .atomic)
     }
 
     private func beginTask(_ download: Download, record: BackgroundDownloadRecord) {
@@ -144,6 +166,7 @@ class DownloadManager: NSObject, ObservableObject {
             task.taskDescription = String(data: description, encoding: .utf8)
             download.task = task
             task.resume()
+            previewDiagnostic("task resumed; state=\(task.state.rawValue)")
         } catch {
             finish(download)
             reportError("Не удалось сохранить загрузку. Освободите место и попробуйте снова.")
@@ -193,6 +216,7 @@ class DownloadManager: NSObject, ObservableObject {
     }
 
     private func reportError(_ message: String) {
+        previewDiagnostic(message)
         if UIApplication.shared.applicationState == .active {
             UIAlertController.showAlertWithOk(title: "Загрузка не завершена", message: message)
         } else { pendingError = message }
@@ -256,6 +280,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error, let task = task as? URLSessionDownloadTask, let download = restore(task) else { return }
+        previewDiagnostic("native error domain=\((error as NSError).domain) code=\((error as NSError).code): \(error.localizedDescription)")
         if (error as NSError).code == NSURLErrorCancelled {
             // Explicit Cancel removed the record already. A surviving record means iOS cancelled
             // the transfer (for example after force-quit); keep the user's intent for relaunch.
