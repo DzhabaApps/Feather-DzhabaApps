@@ -27,7 +27,7 @@ class BackgroundTaskManager: ObservableObject {
         let taskIdentifier = "\(baseId).\(downloadId.md5)"
         guard requested[taskIdentifier] == nil else { return }
 		if !registeredTasks.contains(taskIdentifier) {
-			BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: .main) { task in
+			let registered = BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: .main) { task in
 				guard let task = task as? BGContinuedProcessingTask else { return }
 				guard let progress = self.requested[task.identifier] else { task.setTaskCompleted(success: false); return }
                 self.activeTasks[task.identifier] = task
@@ -43,9 +43,15 @@ class BackgroundTaskManager: ObservableObject {
                         task.setTaskCompleted(success: false)
                         self.activeTasks.removeValue(forKey: task.identifier)
                         self.requested.removeValue(forKey: task.identifier)
+                        DownloadManager.shared.backgroundRuntimeDidChange("continued-expired")
                     }
                 }
+                DownloadManager.shared.backgroundRuntimeDidChange("continued-active")
 			}
+            guard registered else {
+                DownloadManager.shared.backgroundRuntimeDidChange("continued-registration-rejected")
+                return
+            }
 			self.registeredTasks.insert(taskIdentifier)
 		}
 		
@@ -54,11 +60,18 @@ class BackgroundTaskManager: ObservableObject {
 		request.strategy = .queue
 		do {
 			try BGTaskScheduler.shared.submit(request)
+            DownloadManager.shared.backgroundRuntimeDidChange("continued-queued")
 		} catch {
 			requested.removeValue(forKey: taskIdentifier)
+            let failure = error as NSError
+            DownloadManager.shared.backgroundRuntimeDidChange("continued-rejected \(failure.domain) \(failure.code)")
 		}
 	}
 	
+    func isRunning(for downloadId: String) -> Bool {
+        activeTasks["\(baseId).\(downloadId.md5)"] != nil
+    }
+
 	func updateProgress(for downloadId: String, progress: Double) {
 		let taskIdentifier = "\(baseId).\(downloadId.md5)"
 		

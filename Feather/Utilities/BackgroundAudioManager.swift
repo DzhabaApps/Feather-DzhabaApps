@@ -17,7 +17,8 @@ class BackgroundAudioManager {
 
 	private init() {}
 	
-	func start() {
+	@discardableResult
+    func start() -> Bool {
 		do {
 			let session = AVAudioSession.sharedInstance()
 			
@@ -37,8 +38,10 @@ class BackgroundAudioManager {
             source = silence
             }
 			try _engine.start()
+            return true
 		} catch {
 			print("failed to start engine:", error)
+            return false
 		}
 	}
 	

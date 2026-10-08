@@ -122,18 +122,34 @@ class DownloadManager: NSObject, ObservableObject {
 
     private func updateAudioRuntime() {
         #if !targetEnvironment(macCatalyst)
-        if #unavailable(iOS 26.0) {
-            let needed = downloads.contains { !$0.onlyArchiving && $0.task != nil && $0.progress < 1 }
-            guard needed != audioIsRunning else { return }
-            audioIsRunning = needed
-            if needed { BackgroundAudioManager.shared.start() } else { BackgroundAudioManager.shared.stop() }
+        let running = downloads.filter { !$0.onlyArchiving && $0.task?.state == .running && $0.progress < 1 }
+        let needed: Bool
+        if #available(iOS 26.0, *) {
+            // Queued/rejected continued work must not silently strand a transfer.
+            // Use upstream's existing audio runtime until a continued task takes over.
+            needed = running.contains { !BackgroundTaskManager.shared.isRunning(for: $0.id) }
+        } else { needed = !running.isEmpty }
+        guard needed != audioIsRunning else { return }
+        if needed {
+            audioIsRunning = BackgroundAudioManager.shared.start()
+            previewDiagnostic(audioIsRunning ? "audio-fallback-active" : "audio-runtime-unavailable")
+        } else {
+            BackgroundAudioManager.shared.stop()
+            audioIsRunning = false
+            previewDiagnostic("audio-runtime-stopped")
         }
         #endif
+    }
+
+    func backgroundRuntimeDidChange(_ status: String) {
+        previewDiagnostic(status)
+        updateAudioRuntime()
     }
 
     func suspendForBackgroundExpiration(_ id: String) {
         guard UIApplication.shared.applicationState != .active else { return }
         getDownload(by: id)?.task?.suspend()
+        updateAudioRuntime()
         // The journal retains the intent; foreground entry resumes this task.
     }
 
