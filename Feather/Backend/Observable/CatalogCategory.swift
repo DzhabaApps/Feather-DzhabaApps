@@ -1,8 +1,8 @@
 import Foundation
 
 enum CatalogCategory: String, CaseIterable, Identifiable {
-    case all, finance, social, games, utilities, media, education, shopping, other
-    static var storeFilters: [CatalogCategory] { [.all, .finance, .social, .games, .utilities, .media, .other] }
+    case all, finance, social, games, other
+    static var storeFilters: [CatalogCategory] { [.all, .finance, .social, .games, .other] }
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -10,10 +10,6 @@ enum CatalogCategory: String, CaseIterable, Identifiable {
         case .finance: return "Финансы"
         case .social: return "Соцсети"
         case .games: return "Игры"
-        case .utilities: return "Утилиты"
-        case .media: return "Фото и видео"
-        case .education: return "Обучение"
-        case .shopping: return "Покупки"
         case .other: return "Другое"
         }
     }
@@ -23,10 +19,6 @@ enum CatalogCategory: String, CaseIterable, Identifiable {
         case .finance: return "creditcard"
         case .social: return "bubble.left.and.bubble.right"
         case .games: return "gamecontroller"
-        case .utilities: return "wrench.and.screwdriver"
-        case .media: return "play.rectangle"
-        case .education: return "graduationcap"
-        case .shopping: return "bag"
         case .other: return "ellipsis.circle"
         }
     }
@@ -36,10 +28,6 @@ enum CatalogCategory: String, CaseIterable, Identifiable {
             case "finance", "financial", "финансы", "банки": return .finance
             case "social", "socialnetworking", "social networking", "соцсети", "социальные сети": return .social
             case "games", "game", "игры": return .games
-            case "utilities", "utility", "productivity", "navigation", "travel", "утилиты", "навигация": return .utilities
-            case "media", "entertainment", "photo & video", "photoandvideo", "photography", "music", "фото и видео", "развлечения": return .media
-            case "education", "learning", "обучение", "образование": return .education
-            case "shopping", "покупки": return .shopping
             default: return .other
             }
         }
@@ -50,15 +38,8 @@ enum CatalogCategory: String, CaseIterable, Identifiable {
         "ru.bychokcabernet.winescanner": .finance, "com.flavorvault.savor": .finance, "com.inv.gen": .finance,
         "net.whatsapp.whatsapp": .social, "net.whatsapp.whatsappsmb": .social,
         "com.burbn.instagram": .social, "ru.oneme.app": .social,
-        "ru.odnoklassniki.iphone": .social, "com.zhiliaoapp.musically": .social,
-        "com.google.ios.youtube": .media, "me.keet.hdrezka": .media, "com.vk.vkvideo.prod1235": .media,
-        "com.alightcreative.motion": .media, "com.firecore.infuse": .media, "com.picsart.studio": .media,
-        "sh.weme.wemesh": .media, "com.kinemaster.kios": .media,
-        "com.damtechdesigns.wa.story": .media, "com.tickettothemoon.video.persona": .media,
-        "ru.mail.mail": .utilities, "ru.dorogi20260609.passenger": .utilities,
-        "com.iteration-mobile.radarbot-free-ww": .utilities, "com.alpinquest.app": .utilities,
-        "com.duolingo.duolingomobile": .education,
-        "com.allgoritm.youla": .shopping, "org.reactjs.native.prod.aureactnativeapp": .shopping
+        "ru.odnoklassniki.iphone": .social, "com.zhiliaoapp.musically": .social
+
     ]
 }
 

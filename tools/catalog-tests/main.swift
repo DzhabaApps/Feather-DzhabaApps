@@ -6,11 +6,12 @@ assert(CatalogCategory.resolve(bundleID: "new.game", metadata: " Игры ") == 
 assert(CatalogCategory.resolve(bundleID: "new.bank", metadata: "FINANCE") == .finance)
 assert(CatalogCategory.resolve(bundleID: "unknown", metadata: nil) == .other)
 assert(CatalogCategory.resolve(bundleID: "unknown", metadata: "unrecognized") == .other)
-assert(CatalogCategory.resolve(bundleID: "com.flavorvault.savor", metadata: "utilities") == .utilities)
+assert(CatalogCategory.resolve(bundleID: "com.flavorvault.savor", metadata: "utilities") == .other)
 assert(CatalogCategory.resolve(bundleID: "new.social", metadata: "Social Networking") == .social)
-assert(!CatalogCategory.storeFilters.contains(.education))
-assert(!CatalogCategory.storeFilters.contains(.shopping))
-assert(CatalogCategory.storeFilters.contains(.all) && CatalogCategory.storeFilters.contains(.games))
+assert(CatalogCategory.storeFilters == [.all, .finance, .social, .games, .other])
+for category in ["utilities", "media", "education", "shopping", "Фото и видео", "Обучение"] {
+    assert(CatalogCategory.resolve(bundleID: "net.whatsapp.whatsapp", metadata: category) == .other)
+}
 let data = try Data(contentsOf: URL(fileURLWithPath: "Feather/Resources/CatalogPreview.json"))
 let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 let apps = json["apps"] as! [[String: Any]]
@@ -18,11 +19,9 @@ let groups = Dictionary(grouping: apps) { CatalogCategory.resolve(bundleID: $0["
 assert(apps.count == 26)
 assert(groups[.finance]?.count == 3)
 assert(groups[.social]?.count == 6)
-assert(groups[.media]?.count == 10)
-assert(groups[.utilities]?.count == 4)
-assert(groups[.education]?.count == 1)
-assert(groups[.shopping]?.count == 2)
-assert(groups[.other] == nil && groups[.games] == nil)
+assert(groups[.other]?.count == 17)
+assert(groups[.games] == nil)
+assert(groups.keys.allSatisfy { CatalogCategory.storeFilters.contains($0) })
 let date = Date(timeIntervalSince1970: 86400)
 assert(SubscriptionPresentation.expiry(date).contains(".1970 "))
 assert(!SubscriptionPresentation.expiry(date).contains("AM"))
