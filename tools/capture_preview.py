@@ -60,4 +60,7 @@ result = container/'Documents/cache-test-result.json'
 deadline = time.monotonic()+15
 while time.monotonic()<deadline and not result.exists(): time.sleep(1)
 assert result.exists() and all(json.loads(result.read_text()).values()), 'Native library cleanup lost app files or installation/subscription data'
+cleanup = json.loads(result.read_text())
+cleanup['commit'] = __import__('plistlib').loads((app/'Info.plist').read_bytes())['CFBundleVersion']
+(output/'Cleanup-validation.json').write_text(json.dumps(cleanup), encoding='utf-8')
 print('Native library cleanup: downloaded and prepared apps removed; installation credentials and paid-period marker preserved')

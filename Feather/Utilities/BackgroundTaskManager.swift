@@ -10,6 +10,7 @@
 import Foundation
 import BackgroundTasks
 import CryptoKit
+import UIKit
 
 @available(iOS 26.0, *)
 class BackgroundTaskManager: ObservableObject {
@@ -19,52 +20,60 @@ class BackgroundTaskManager: ObservableObject {
 	
 	private var activeTasks: [String: BGContinuedProcessingTask] = [:]
 	private var registeredTasks: Set<String> = []
+    private var requested: [String: Double] = [:]
 	
 	func startTask(for downloadId: String, filename: String) {
-		let taskIdentifier = "\(baseId).\(downloadId.md5)"
-		
+		guard UIApplication.shared.applicationState == .active else { return }
+        let taskIdentifier = "\(baseId).\(downloadId.md5)"
+        guard requested[taskIdentifier] == nil else { return }
 		if !registeredTasks.contains(taskIdentifier) {
-			BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: nil) { task in
+			BGTaskScheduler.shared.register(forTaskWithIdentifier: taskIdentifier, using: .main) { task in
 				guard let task = task as? BGContinuedProcessingTask else { return }
-				self.activeTasks[task.identifier] = task
+				guard let progress = self.requested[task.identifier] else { task.setTaskCompleted(success: false); return }
+                self.activeTasks[task.identifier] = task
+                task.progress.totalUnitCount = 1000
+                task.progress.completedUnitCount = Int64(progress * 1000)
 				
-				task.expirationHandler = {
-					if let download = DownloadManager.shared.getDownload(by: downloadId) {
-						DownloadManager.shared.cancelDownload(download)
-					}
-					self.activeTasks.removeValue(forKey: task.identifier)
-				}
+                task.expirationHandler = {
+                    DispatchQueue.main.async {
+                        // Runtime for progress/local work is independent of URLSession.
+                        // Expiry must not cancel the durable system network transfer.
+                        task.setTaskCompleted(success: false)
+                        self.activeTasks.removeValue(forKey: task.identifier)
+                        self.requested.removeValue(forKey: task.identifier)
+                    }
+                }
 			}
 			self.registeredTasks.insert(taskIdentifier)
 		}
 		
-		let request = BGContinuedProcessingTaskRequest(identifier: taskIdentifier, title: filename, subtitle: .localized("Downloading"))
+		requested[taskIdentifier] = 0
+        let request = BGContinuedProcessingTaskRequest(identifier: taskIdentifier, title: filename, subtitle: .localized("Downloading"))
 		request.strategy = .queue
 		do {
 			try BGTaskScheduler.shared.submit(request)
 		} catch {
-			print(error)
+			requested.removeValue(forKey: taskIdentifier)
 		}
 	}
 	
 	func updateProgress(for downloadId: String, progress: Double) {
 		let taskIdentifier = "\(baseId).\(downloadId.md5)"
 		
-		guard let task = activeTasks[taskIdentifier] else { return }
-		task.progress.totalUnitCount = 100
-		task.progress.completedUnitCount = Int64(progress * 100)
-		
-		task.updateTitle(task.title, subtitle: "\(Int(progress * 100))%")
-		
-		if task.progress.completedUnitCount == task.progress.totalUnitCount {
-			stopTask(for: downloadId, success: true)
-		}
+        guard requested[taskIdentifier] != nil, progress.isFinite else { return }
+        let value = min(1, max(0, progress))
+        requested[taskIdentifier] = value
+        guard let task = activeTasks[taskIdentifier] else { return }
+        task.progress.totalUnitCount = 1000
+        task.progress.completedUnitCount = Int64(value * 1000)
+        task.updateTitle(task.title, subtitle: "\(Int(value * 100))%")
 	}
 	
 	func stopTask(for downloadId: String, success: Bool) {
 		let taskIdentifier = "\(baseId).\(downloadId.md5)"
-		guard let task = activeTasks[taskIdentifier] else { return }
-		
+		requested.removeValue(forKey: taskIdentifier)
+        BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskIdentifier)
+        guard let task = activeTasks[taskIdentifier] else { return }
 		task.setTaskCompleted(success: success)
 		activeTasks.removeValue(forKey: taskIdentifier)
 	}

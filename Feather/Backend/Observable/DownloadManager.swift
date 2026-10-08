@@ -51,11 +51,13 @@ class Download: Identifiable, @unchecked Sendable {
 // Delegates and persistence are serialized on the main queue.
 class DownloadManager: NSObject, ObservableObject {
     static let shared = DownloadManager()
-    static let backgroundIdentifier = (Bundle.main.bundleIdentifier ?? "thewonderofyou.Feather") + ".downloads.v1"
+    // v2 starts a clean system session after v1's temporary folders could be purged.
+    static let backgroundIdentifier = (Bundle.main.bundleIdentifier ?? "thewonderofyou.Feather") + ".downloads.v2"
     @Published var downloads: [Download] = []
     @Published private(set) var isRestoring = true
     var manualDownloads: [Download] { downloads.filter { isManualDownload($0.id) } }
     private var _session: URLSession!
+    private var legacySession: URLSession?
     private let store = BackgroundDownloadStore()
     private var records: [String: BackgroundDownloadRecord] = [:]
     private var processing: Set<String> = []
@@ -87,7 +89,8 @@ class DownloadManager: NSObject, ObservableObject {
                 try? Data("background".utf8).write(to: URL.documentsDirectory.appendingPathComponent("background-test-lifecycle.txt"), options: .atomic)
             }
         }
-        _session.getAllTasks { tasks in
+        let restoreTasks = {
+          self._session.getAllTasks { tasks in
             DispatchQueue.main.async {
                 for case let task as URLSessionDownloadTask in tasks {
                     guard let download = self.restore(task) else { task.cancel(); continue }
@@ -99,6 +102,24 @@ class DownloadManager: NSObject, ObservableObject {
                 self.isRestoring = false
                 self.processReadyDownloads()
             }
+          }
+        }
+        let migrationKey = "Fizer.DownloadSessionV2"
+        if !UserDefaults.standard.bool(forKey: migrationKey) {
+            let oldIdentifier = (Bundle.main.bundleIdentifier ?? "thewonderofyou.Feather") + ".downloads.v1"
+            let old = URLSession(configuration: .background(withIdentifier: oldIdentifier), delegate: self, delegateQueue: .main)
+            legacySession = old
+            old.getAllTasks { tasks in
+                for task in tasks { task.cancel() }
+                old.invalidateAndCancel()
+                DispatchQueue.main.async {
+                    self.legacySession = nil
+                    UserDefaults.standard.set(true, forKey: migrationKey)
+                    restoreTasks()
+                }
+            }
+        } else {
+            restoreTasks()
         }
     }
 
@@ -120,6 +141,7 @@ class DownloadManager: NSObject, ObservableObject {
             try store.save(record)
             records[id] = record
             downloads.append(download)
+            startProgress(download)
             beginTask(download, record: record)
         } catch { reportError("Не удалось сохранить загрузку. Освободите место и попробуйте снова.") }
         return download
@@ -188,10 +210,21 @@ class DownloadManager: NSObject, ObservableObject {
         download.task?.cancel()
         finish(download)
     }
-    private func finish(_ download: Download) {
+    private func finish(_ download: Download, success: Bool = false) {
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.stopTask(for: download.id, success: success) }
+        #endif
         if let record = records.removeValue(forKey: download.id) { try? store.remove(record) }
         processing.remove(download.id)
         downloads.removeAll { $0.id == download.id }
+    }
+    private func startProgress(_ download: Download) {
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            BackgroundTaskManager.shared.startTask(for: download.id, filename: download.displayName)
+            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress)
+        }
+        #endif
     }
     func isManualDownload(_ id: String) -> Bool { id.contains("FeatherManualDownload") }
     func getDownload(by id: String) -> Download? { downloads.first { $0.id == id } }
@@ -229,10 +262,11 @@ class DownloadManager: NSObject, ObservableObject {
         if let message = pendingError { pendingError = nil; reportError(message) }
         for download in downloads {
             guard let record = records[download.id], !processing.contains(download.id) else { continue }
+            startProgress(download)
             if store.isReady(record) {
                 download.progress = 1
                 // Import may have succeeded just before the system terminated the app.
-                if RepositoryInstallCoordinator.shared.libraryApp(for: record.source) != nil { finish(download); continue }
+                if RepositoryInstallCoordinator.shared.libraryApp(for: record.source) != nil { finish(download, success: true); continue }
                 processing.insert(download.id)
                 try? handlePachageFile(url: store.packageURL(record), dl: download)
             } else if download.task == nil, FeatherAccessManager.shared.permitsAccess() {
@@ -255,11 +289,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
             let downloadsRoot = FileManager.default.temporaryDirectory.appendingPathComponent("FeatherDownloads").path + "/"
             if url.path.hasPrefix(downloadsRoot) { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-            self.finish(dl)
+            self.finish(dl, success: error == nil)
             completion?()
         }
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard session === _session else { return }
         guard let download = restore(downloadTask), let record = records[download.id] else { return }
         do {
             guard let response = downloadTask.response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else {
@@ -273,12 +308,17 @@ extension DownloadManager: URLSessionDownloadDelegate {
         } catch { finish(download); reportError(error.localizedDescription) }
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard session === _session else { return }
         guard let download = restore(downloadTask) else { return }
         download.progress = totalBytesExpectedToWrite > 0 ? Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) : 0
         download.bytesDownloaded = totalBytesWritten
         download.totalBytes = totalBytesExpectedToWrite
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress) }
+        #endif
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard session === _session else { return }
         guard let error, let task = task as? URLSessionDownloadTask, let download = restore(task) else { return }
         previewDiagnostic("native error domain=\((error as NSError).domain) code=\((error as NSError).code): \(error.localizedDescription)")
         if (error as NSError).code == NSURLErrorCancelled {
@@ -289,9 +329,15 @@ extension DownloadManager: URLSessionDownloadDelegate {
             return
         }
         finish(download)
-        reportError("Не удалось скачать приложение. Проверьте интернет и попробуйте снова. " + error.localizedDescription)
+        let failure = error as NSError
+        if failure.domain == NSURLErrorDomain && [NSURLErrorCannotCreateFile, NSURLErrorCannotWriteToFile, NSURLErrorCannotMoveFile].contains(failure.code) {
+            reportError("Не удалось сохранить файл приложения. Проверьте свободное место на iPhone и повторите загрузку. Если ошибка повторяется, закройте и откройте Fizer.")
+        } else {
+            reportError("Не удалось скачать приложение. Проверьте интернет и попробуйте снова. " + error.localizedDescription)
+        }
     }
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        guard session === _session else { return }
         let completion = backgroundCompletion
         backgroundCompletion = nil
         // Files are already durable. Unpacking waits for foreground; it must not delay this callback.

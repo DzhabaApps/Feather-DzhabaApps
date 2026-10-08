@@ -24,6 +24,11 @@ def promote(source: pathlib.Path, destination: pathlib.Path, *, version: str = '
         assert not any('signing-assets/' in n for n in original.namelist())
         info['CFBundleIdentifier'] = 'thewonderofyou.Feather'
         info['CFBundleDisplayName'] = 'Feather'
+        info['BGTaskSchedulerPermittedIdentifiers'] = [
+            identifier.replace('ru.dzhabaapps.fizer.preview.', 'thewonderofyou.Feather.', 1)
+            for identifier in info.get('BGTaskSchedulerPermittedIdentifiers', [])
+        ]
+        assert 'thewonderofyou.Feather.userTask.*' in info['BGTaskSchedulerPermittedIdentifiers']
         for url_type in info['CFBundleURLTypes']:
             url_type['CFBundleURLSchemes'] = ['feather' if s == 'fizer-preview' else s for s in url_type['CFBundleURLSchemes']]
         destination.parent.mkdir(parents=True, exist_ok=True)

@@ -23,7 +23,8 @@ struct LibraryView: View {
 	@State private var _selectedAppUUIDs: Set<String> = []
 	@State private var _editMode: EditMode = .inactive
 	
-	@State private var _showCacheConfirmation = false
+	@State private var _cacheBytes: Int64 = 0
+    @State private var _showCacheConfirmation = false
     @State private var _cacheError: String?
     @State private var _showCacheError = false
     @ObservedObject private var installer = RepositoryInstallCoordinator.shared
@@ -68,10 +69,21 @@ struct LibraryView: View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
                 Section {
-                    Button("Очистить кэш", systemImage: "trash") { _showCacheConfirmation = true }
-                        .disabled(!canClearCache)
-                } footer: {
-                    Text("Удаляет скачанные файлы из Fizer. Установленные на iPhone приложения останутся.")
+                    Button { _showCacheConfirmation = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "internaldrive").foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Освободить место").font(.subheadline.weight(.medium))
+                                Text(_cacheBytes > 0 ? "\(ByteCountFormatter.string(fromByteCount: _cacheBytes, countStyle: .file)) · скачанные файлы" : "Нет скачанных файлов")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canClearCache || _cacheBytes == 0)
                 }
                 if _filteredSignedApps.isEmpty && _filteredImportedApps.isEmpty {
                     Text(_searchText.isEmpty ? "Скачайте приложение из магазина — оно появится здесь." : "Ничего не найдено")
@@ -115,6 +127,8 @@ struct LibraryView: View {
 					}
 				}
 			}
+            .task { await updateCacheSize() }
+            .onChange(of: _signedApps.count + _importedApps.count) { _ in Task { await updateCacheSize() } }
 			.searchable(text: $_searchText, placement: .platform())
 			.compatSearchScopes($_selectedScope) {
 				ForEach(Scope.allCases, id: \.displayName) { scope in
@@ -172,14 +186,19 @@ struct LibraryView: View {
 				)
 				.ignoresSafeArea()
 			}
-            .confirmationDialog("Очистить кэш?", isPresented: $_showCacheConfirmation, titleVisibility: .visible) {
+            .confirmationDialog("Удалить скачанные файлы?", isPresented: $_showCacheConfirmation, titleVisibility: .visible) {
                 Button("Удалить скачанные файлы", role: .destructive) {
                     guard canClearCache else { return }
-                    do { try Storage.shared.clearDownloadedApps(); ResetView.clearWorkCache(); ResetView.clearNetworkCache() }
+                    do {
+                        try Storage.shared.clearDownloadedApps()
+                        _cacheError = "Скачанные файлы удалены. Приложения на iPhone остались на месте."
+                        _showCacheError = true
+                        Task { await updateCacheSize() }
+                    }
                     catch { _cacheError = "Не удалось удалить все файлы. Попробуйте снова."; _showCacheError = true }
                 }
             } message: { Text("Файлы в библиотеке Fizer будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
-            .alert("Очистка кэша", isPresented: $_showCacheError) { Button("OK", role: .cancel) {} } message: { Text(_cacheError ?? "") }
+            .alert("Хранилище", isPresented: $_showCacheError) { Button("OK", role: .cancel) {} } message: { Text(_cacheError ?? "") }
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
 				TextField(.localized("URL"), text: $_alertDownloadString)
 					.textInputAutocapitalization(.never)
@@ -204,6 +223,13 @@ struct LibraryView: View {
 			}
 		}
 	}
+}
+
+extension LibraryView {
+    private func updateCacheSize() async {
+        let snapshot = await Task.detached(priority: .utility) { LocalAppFiles.snapshot() }.value
+        _cacheBytes = snapshot.apps + snapshot.work
+    }
 }
 
 // MARK: - Extension: View

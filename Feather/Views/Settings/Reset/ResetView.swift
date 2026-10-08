@@ -144,14 +144,9 @@ extension ResetView {
 // MARK: - View extension: reset
 extension ResetView {
 	static func clearWorkCache() {
-		let fileManager = FileManager.default
-		let tmpDirectory = fileManager.temporaryDirectory
-		
-		if let files = try? fileManager.contentsOfDirectory(atPath: tmpDirectory.path()) {
-			for file in files {
-				try? fileManager.removeItem(atPath: tmpDirectory.appendingPathComponent(file).path())
-			}
-		}
+		guard !DownloadManager.shared.isRestoring, DownloadManager.shared.downloads.isEmpty,
+              !RepositoryInstallCoordinator.shared.isBusy else { return }
+        try? LocalAppFiles.clearWork()
 	}
 	
 	static func clearNetworkCache() {

@@ -11,9 +11,10 @@ CERT_JSON_URL := https://backloop.dev/pack.json
 all: verify $(PLATFORMS) preview-screenshots
 
 verify:
-	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/BackgroundDownloadStore.swift tools/background-tests/main.swift -o /tmp/fizer-background-tests
+	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/BackgroundDownloadStore.swift Feather/Backend/Storage/LocalAppFiles.swift tools/background-tests/main.swift -o /tmp/fizer-background-tests
 	/tmp/fizer-background-tests
 	python3 tools/check_preview.py
+	python3 tools/test_promote.py
 	xcrun swiftc Feather/Backend/Observable/CatalogCategory.swift tools/catalog-tests/main.swift -o /tmp/feather-catalog-tests
 	/tmp/feather-catalog-tests
 	xcrun swiftc Feather/Backend/Observable/FeatherAccessLease.swift Feather/Backend/Observable/FeatherAccessManager.swift tools/access-tests/main.swift -o /tmp/feather-access-tests

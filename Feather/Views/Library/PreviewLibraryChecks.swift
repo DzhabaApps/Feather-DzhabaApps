@@ -1,5 +1,6 @@
 import Foundation
 import CoreData
+import Nuke
 
 // Synthetic fixtures are reachable only under the isolated preview bundle identity.
 @MainActor
@@ -23,7 +24,7 @@ enum PreviewLibraryChecks {
             if !DownloadManager.shared.isRestoring { break }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        var result = ["cleared": false, "credentialsPreserved": false]
+        var result = ["cleared": false, "credentialsPreserved": false, "systemTemporaryPreserved": false, "iconsPreserved": false, "orphansRemoved": false]
         do {
             guard !DownloadManager.shared.isRestoring, DownloadManager.shared.downloads.isEmpty, !RepositoryInstallCoordinator.shared.isBusy else { throw CocoaError(.fileWriteUnknown) }
             let context = Storage.shared.context
@@ -41,8 +42,27 @@ enum PreviewLibraryChecks {
             let marker = FileManager.default.certificates.appendingPathComponent("preview-preservation.txt")
             try Data("synthetic-credential-marker".utf8).write(to: marker)
             UserDefaults.standard.set("paid-period-marker", forKey: "Fizer.CacheTest.Subscription")
+            let orphan = FileManager.default.signed(UUID().uuidString)
+            try FileManager.default.createDirectory(at: orphan, withIntermediateDirectories: true)
+            try Data(repeating: 1, count: 4096).write(to: orphan.appendingPathComponent("orphan.dat"))
+            let systemDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("NSURLSession-PreservationFixture")
+            try FileManager.default.createDirectory(at: systemDirectory, withIntermediateDirectories: true)
+            let systemFile = systemDirectory.appendingPathComponent("download.tmp")
+            try Data("session-state".utf8).write(to: systemFile)
+            let icon = Data("cached-catalog-icon".utf8)
+            guard let imageCache = ImagePipeline.shared.configuration.dataCache else { throw CocoaError(.fileReadUnknown) }
+            imageCache.storeData(icon, for: "Fizer.CacheTest.Icon")
             try Storage.shared.clearDownloadedApps()
+            // Exercise the actual public work-cleaning entry point too.
+            ResetView.clearWorkCache()
             result["cleared"] = try count("Imported") == 0 && count("Signed") == 0
+            result["orphansRemoved"] = !FileManager.default.fileExists(atPath: orphan.path)
+            result["systemTemporaryPreserved"] = (try Data(contentsOf: systemFile)) == Data("session-state".utf8)
+            result["iconsPreserved"] = imageCache.cachedData(for: "Fizer.CacheTest.Icon") == icon
+            // A subsequent download can still create a file in the same session folder.
+            try Data("next-download".utf8).write(to: systemDirectory.appendingPathComponent("next.tmp"))
+            try FileManager.default.removeItem(at: systemDirectory)
+            imageCache.removeData(for: "Fizer.CacheTest.Icon")
             let data = try Data(contentsOf: marker)
             result["credentialsPreserved"] = try count("CertificatePair") == certificateCount && !certificate.isDeleted && data == Data("synthetic-credential-marker".utf8) && UserDefaults.standard.string(forKey: "Fizer.CacheTest.Subscription") == "paid-period-marker"
             try FileManager.default.removeItem(at: marker)
