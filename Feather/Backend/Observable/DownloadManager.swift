@@ -294,6 +294,9 @@ class DownloadManager: NSObject, ObservableObject {
             startProgress(download)
             if download.task?.state == .suspended { download.task?.resume(); updateAudioRuntime() }
             if store.isReady(record) {
+                // Isolated simulator fixture retains actual received bytes for verification.
+                if Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview",
+                   ProcessInfo.processInfo.environment["FIZER_BACKGROUND_TEST_HOLD_IMPORT"] == "1" { continue }
                 download.progress = 1
                 // Import may have succeeded just before the system terminated the app.
                 if RepositoryInstallCoordinator.shared.libraryApp(for: record.source) != nil { finish(download, success: true); continue }
