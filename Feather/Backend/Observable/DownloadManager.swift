@@ -51,19 +51,17 @@ class Download: Identifiable, @unchecked Sendable {
 // Delegates and persistence are serialized on the main queue.
 class DownloadManager: NSObject, ObservableObject {
     static let shared = DownloadManager()
-    // v2 starts a clean system session after v1's temporary folders could be purged.
-    static let backgroundIdentifier = (Bundle.main.bundleIdentifier ?? "thewonderofyou.Feather") + ".downloads.v2"
     @Published var downloads: [Download] = []
     @Published private(set) var isRestoring = true
     var manualDownloads: [Download] { downloads.filter { isManualDownload($0.id) } }
     private var _session: URLSession!
-    private var legacySession: URLSession?
+    private var legacySessions: [URLSession] = []
+    private var audioIsRunning = false
     private let store = BackgroundDownloadStore()
     private var records: [String: BackgroundDownloadRecord] = [:]
     private var processing: Set<String> = []
     private var activeObserver: NSObjectProtocol?
     private var backgroundObserver: NSObjectProtocol?
-    private var backgroundCompletion: (() -> Void)?
     private var pendingError: String?
 
     override init() {
@@ -74,9 +72,10 @@ class DownloadManager: NSObject, ObservableObject {
             if store.isReady(record) { download.progress = 1 }
             downloads.append(download)
         }
-        let configuration = URLSessionConfiguration.background(withIdentifier: Self.backgroundIdentifier)
-        configuration.isDiscretionary = false
-        configuration.sessionSendsLaunchEvents = true
+        // Match upstream/provider Feather: in-process downloads, kept running by
+        // BGContinuedProcessingTask (iOS26) or the existing audio runtime (older iOS).
+        // nsurlsessiond file delivery fails for some supplier profile identities.
+        let configuration = URLSessionConfiguration.default
         configuration.waitsForConnectivity = true
         configuration.timeoutIntervalForRequest = 120
         configuration.timeoutIntervalForResource = 7 * 24 * 60 * 60
@@ -104,27 +103,38 @@ class DownloadManager: NSObject, ObservableObject {
             }
           }
         }
-        let migrationKey = "Fizer.DownloadSessionV2"
+        restoreTasks()
+        let migrationKey = "Fizer.DownloadSessionInProcess"
         if !UserDefaults.standard.bool(forKey: migrationKey) {
-            let oldIdentifier = (Bundle.main.bundleIdentifier ?? "thewonderofyou.Feather") + ".downloads.v1"
-            let old = URLSession(configuration: .background(withIdentifier: oldIdentifier), delegate: self, delegateQueue: .main)
-            legacySession = old
-            old.getAllTasks { tasks in
-                for task in tasks { task.cancel() }
-                old.invalidateAndCancel()
-                DispatchQueue.main.async {
-                    self.legacySession = nil
-                    UserDefaults.standard.set(true, forKey: migrationKey)
-                    restoreTasks()
+            for version in ["v1", "v2"] {
+                let identifier = (Bundle.main.bundleIdentifier ?? "thewonderofyou.Feather") + ".downloads." + version
+                let old = URLSession(configuration: .background(withIdentifier: identifier), delegate: self, delegateQueue: .main)
+                legacySessions.append(old)
+                old.getAllTasks { tasks in
+                    for task in tasks { task.cancel() }
+                    old.invalidateAndCancel()
+                    DispatchQueue.main.async { self.legacySessions.removeAll { $0 === old } }
                 }
             }
-        } else {
-            restoreTasks()
+            UserDefaults.standard.set(true, forKey: migrationKey)
         }
     }
 
-    func handleBackgroundEvents(completion: @escaping () -> Void) {
-        backgroundCompletion = completion
+    private func updateAudioRuntime() {
+        #if !targetEnvironment(macCatalyst)
+        if #unavailable(iOS 26.0) {
+            let needed = downloads.contains { !$0.onlyArchiving && $0.task != nil && $0.progress < 1 }
+            guard needed != audioIsRunning else { return }
+            audioIsRunning = needed
+            if needed { BackgroundAudioManager.shared.start() } else { BackgroundAudioManager.shared.stop() }
+        }
+        #endif
+    }
+
+    func suspendForBackgroundExpiration(_ id: String) {
+        guard UIApplication.shared.applicationState != .active else { return }
+        getDownload(by: id)?.task?.suspend()
+        // The journal retains the intent; foreground entry resumes this task.
     }
 
     func startDownload(from url: URL, id: String = UUID().uuidString, source: URL? = nil, displayName: String? = nil) -> Download {
@@ -188,6 +198,7 @@ class DownloadManager: NSObject, ObservableObject {
             task.taskDescription = String(data: description, encoding: .utf8)
             download.task = task
             task.resume()
+            updateAudioRuntime()
             previewDiagnostic("task resumed; state=\(task.state.rawValue)")
         } catch {
             finish(download)
@@ -203,7 +214,7 @@ class DownloadManager: NSObject, ObservableObject {
 
     func resumeDownload(_ download: Download) {
         guard FeatherAccessManager.shared.permitsAccess(), let record = records[download.id], !store.isReady(record) else { return }
-        if let task = download.task { task.resume() } else { beginTask(download, record: record) }
+        if let task = download.task { task.resume(); updateAudioRuntime() } else { beginTask(download, record: record) }
     }
 
     func cancelDownload(_ download: Download) {
@@ -217,6 +228,7 @@ class DownloadManager: NSObject, ObservableObject {
         if let record = records.removeValue(forKey: download.id) { try? store.remove(record) }
         processing.remove(download.id)
         downloads.removeAll { $0.id == download.id }
+        updateAudioRuntime()
     }
     private func startProgress(_ download: Download) {
         guard download.progress < 1 else { return }
@@ -264,6 +276,7 @@ class DownloadManager: NSObject, ObservableObject {
         for download in downloads {
             guard let record = records[download.id], !processing.contains(download.id) else { continue }
             startProgress(download)
+            if download.task?.state == .suspended { download.task?.resume(); updateAudioRuntime() }
             if store.isReady(record) {
                 download.progress = 1
                 // Import may have succeeded just before the system terminated the app.
@@ -311,6 +324,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
             }
             #endif
             download.task = nil
+            updateAudioRuntime()
             processReadyDownloads()
         } catch { finish(download); reportError(error.localizedDescription) }
     }
@@ -342,12 +356,5 @@ extension DownloadManager: URLSessionDownloadDelegate {
         } else {
             reportError("Не удалось скачать приложение. Проверьте интернет и попробуйте снова. " + error.localizedDescription)
         }
-    }
-    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-        guard session === _session else { return }
-        let completion = backgroundCompletion
-        backgroundCompletion = nil
-        // Files are already durable. Unpacking waits for foreground; it must not delay this callback.
-        DispatchQueue.main.async { completion?() }
     }
 }

@@ -130,8 +130,9 @@ struct FeatherApp: App {
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
-        guard identifier == DownloadManager.backgroundIdentifier else { completionHandler(); return }
-        DownloadManager.shared.handleBackgroundEvents(completion: completionHandler)
+        // Only retired v1/v2 daemon sessions can send these events now.
+        // New transfers run in-process; their files are persisted by the delegate.
+        completionHandler()
     }
 	func application(
 		_ application: UIApplication,

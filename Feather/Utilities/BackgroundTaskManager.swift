@@ -37,8 +37,9 @@ class BackgroundTaskManager: ObservableObject {
                 task.expirationHandler = {
                     DispatchQueue.main.async {
                         guard self.activeTasks[task.identifier] === task else { return }
-                        // Runtime for progress/local work is independent of URLSession.
-                        // Expiry must not cancel the durable system network transfer.
+                        // iOS can end the in-process runtime. Pause outside foreground;
+                        // keep the intent and resume when the user opens the app.
+                        DownloadManager.shared.suspendForBackgroundExpiration(downloadId)
                         task.setTaskCompleted(success: false)
                         self.activeTasks.removeValue(forKey: task.identifier)
                         self.requested.removeValue(forKey: task.identifier)

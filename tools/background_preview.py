@@ -21,8 +21,7 @@ def exercise(root, app, device):
     info = plistlib.loads(info_path.read_bytes())
     info.setdefault('NSAppTransportSecurity', {})['NSAllowsArbitraryLoads'] = True
     info_path.write_bytes(plistlib.dumps(info))
-    # Background XPC services authenticate the caller; an unsigned simulator app
-    # is not a representative counterpart of the individually signed iPhone build.
+    # Sign the simulator build consistently with its preview identity.
     run('codesign','--force','--deep','--sign','-','--identifier',IDENTITY,str(app))
     run('xcrun', 'simctl', 'install', device, str(app))
     fixture = io.BytesIO()
@@ -56,7 +55,7 @@ def exercise(root, app, device):
     try:
         subprocess.run(['xcrun','simctl','terminate',device,IDENTITY],cwd=root,capture_output=True)
         run('xcrun','simctl','launch',device,IDENTITY,env=env)
-        assert started.wait(150), 'Native background session did not start the fixture request'
+        assert started.wait(150), 'In-process download did not start the fixture request'
         run('xcrun','simctl','openurl',device,f'http://127.0.0.1:{server.server_port}/home')
         deadline=time.monotonic()+45
         lifecycle=container/'Documents/background-test-lifecycle.txt'
@@ -86,26 +85,8 @@ def exercise(root, app, device):
         print('Persisted download records:',len(records),flush=True)
         logs=subprocess.run(['xcrun','simctl','spawn',device,'log','show','--last','4m','--style','compact','--predicate','process == "Feather" AND (eventMessage CONTAINS "error" OR eventMessage CONTAINS "download")'],capture_output=True,text=True)
         print('Simulator download diagnostics:',logs.stdout[-6000:],flush=True)
-        if started.is_set() or 'NSCocoaErrorDomain Code=4097' not in logs.stdout or 'com.apple.nsurlsessiond' not in logs.stdout:
-            raise
-        # Apple DTS recommends physical devices for background session verification.
-        # Only this exact unavailable simulator service is a skip; network, byte,
-        # persistence or import failures still fail the build above.
-        print('::warning::Native background transfer UNVERIFIED: simulator nsurlsessiond XPC service unavailable (4097). Real-device test required. Checking recovery/import separately.',flush=True)
-        subprocess.run(['xcrun','simctl','terminate',device,IDENTITY],cwd=root,capture_output=True)
-        token=str(uuid.uuid4()).upper()
-        journal=container/'Library/Application Support/FizerDownloads'
-        (journal/token).mkdir(parents=True,exist_ok=True)
-        (journal/token/'package.ipa').write_bytes(payload)
-        (journal/(token+'.json')).write_text(json.dumps({'token':token,'id':'background-integration','url':url,'source':url,'displayName':'Фоновая проверка'}),encoding='utf-8')
-        env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN']='library'
-        run('xcrun','simctl','launch',device,IDENTITY,env=env)
-        result=container/'Documents/background-test-result.json'
-        deadline=time.monotonic()+60
-        while time.monotonic()<deadline and not result.exists():time.sleep(1)
-        assert result.exists() and json.loads(result.read_text())['imported'] is True, 'Persisted fixture recovery/import failed'
-        (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':'unverified-simulator-service-4097','persistentRecovery':'passed','commit':info['CFBundleVersion']}),encoding='utf-8')
-        print('Native persisted fixture recovery/import passed; this is NOT a passed background transfer test.',flush=True)
-        return container
+        # New transfers are in-process. A retired daemon's XPC warning cannot
+        # justify skipping a failure in the current transport.
+        raise
     finally:
         server.shutdown();server.server_close()
