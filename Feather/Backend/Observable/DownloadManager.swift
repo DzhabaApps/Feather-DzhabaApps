@@ -219,10 +219,11 @@ class DownloadManager: NSObject, ObservableObject {
         downloads.removeAll { $0.id == download.id }
     }
     private func startProgress(_ download: Download) {
+        guard download.progress < 1 else { return }
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.startTask(for: download.id, filename: download.displayName)
-            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress)
+            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.progress)
         }
         #endif
     }
@@ -303,6 +304,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
             // Move synchronously: URLSession deletes its temporary file after this delegate returns.
             try store.receive(location, for: record)
             download.progress = 1
+            #if !targetEnvironment(macCatalyst)
+            if #available(iOS 26.0, *) {
+                BackgroundTaskManager.shared.updateProgress(for: download.id, progress: 1)
+                BackgroundTaskManager.shared.stopTask(for: download.id, success: true)
+            }
+            #endif
             download.task = nil
             processReadyDownloads()
         } catch { finish(download); reportError(error.localizedDescription) }
@@ -314,7 +321,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
         download.bytesDownloaded = totalBytesWritten
         download.totalBytes = totalBytesExpectedToWrite
         #if !targetEnvironment(macCatalyst)
-        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress) }
+        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.progress) }
         #endif
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

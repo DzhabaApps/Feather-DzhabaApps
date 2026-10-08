@@ -36,6 +36,7 @@ class BackgroundTaskManager: ObservableObject {
 				
                 task.expirationHandler = {
                     DispatchQueue.main.async {
+                        guard self.activeTasks[task.identifier] === task else { return }
                         // Runtime for progress/local work is independent of URLSession.
                         // Expiry must not cancel the durable system network transfer.
                         task.setTaskCompleted(success: false)
