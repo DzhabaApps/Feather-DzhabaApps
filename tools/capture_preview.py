@@ -40,7 +40,7 @@ run('xcrun', 'simctl', 'install', device, str(app))
 container = exercise(root, app, device)
 validation=container/'Documents/background-validation.json'
 if validation.exists(): (output/'Background-validation.json').write_bytes(validation.read_bytes())
-screens = ['library', 'store-news', 'app-detail', 'settings', 'installation', 'advanced', 'help', 'access-expired', 'access-offline', 'store', 'store-finance', 'store-social', 'store-games']
+screens = ['library', 'store-news', 'app-detail', 'settings', 'installation', 'storage', 'advanced', 'help', 'access-expired', 'access-offline', 'store', 'store-finance', 'store-social', 'store-games']
 for screen in screens:
     subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
     env = os.environ.copy()

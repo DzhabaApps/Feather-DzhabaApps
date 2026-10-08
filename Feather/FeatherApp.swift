@@ -95,6 +95,7 @@ struct FeatherApp: App {
 		case "store-social": SourcesView(previewCategory: .social)
 		case "store-games": SourcesView(previewCategory: .games)
 		case "installation": NavigationStack { InstallationPreferencesView() }
+        case "storage": NavigationStack { StorageSettingsView() }
 		case "advanced": NavigationStack { AdvancedSettingsView() }
 		case "help": NavigationStack { FizerHelpView() }
 		default: SettingsView(previewState: .active, previewExpiry: Date(timeIntervalSince1970: 1799272800))

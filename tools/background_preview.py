@@ -76,6 +76,7 @@ def exercise(root, app, device):
         deadline=time.monotonic()+30
         while time.monotonic()<deadline and not result.exists(): time.sleep(1)
         assert result.exists() and json.loads(result.read_text())['imported'] is True, 'Completed package did not recover/import on relaunch'
+        (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':'passed-native-simulator','persistentRecovery':'passed','commit':info['CFBundleVersion']}),encoding='utf-8')
         print('Native background download: switched to Safari, completed outside app, durable bytes verified, relaunch imported successfully',flush=True)
         return container
     except Exception:
@@ -103,7 +104,7 @@ def exercise(root, app, device):
         deadline=time.monotonic()+60
         while time.monotonic()<deadline and not result.exists():time.sleep(1)
         assert result.exists() and json.loads(result.read_text())['imported'] is True, 'Persisted fixture recovery/import failed'
-        (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':'unverified-simulator-service-4097','persistentRecovery':'passed'}),encoding='utf-8')
+        (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':'unverified-simulator-service-4097','persistentRecovery':'passed','commit':info['CFBundleVersion']}),encoding='utf-8')
         print('Native persisted fixture recovery/import passed; this is NOT a passed background transfer test.',flush=True)
         return container
     finally:
