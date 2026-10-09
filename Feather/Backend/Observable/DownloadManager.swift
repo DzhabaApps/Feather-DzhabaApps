@@ -407,7 +407,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
         finish(download)
         let failure = error as NSError
         if failure.domain == NSURLErrorDomain && [NSURLErrorCannotCreateFile, NSURLErrorCannotWriteToFile, NSURLErrorCannotMoveFile].contains(failure.code) {
-            reportError("Не удалось сохранить файл приложения. Проверьте свободное место на iPhone и повторите загрузку. Если ошибка повторяется, закройте и откройте Fizer.")
+            reportError("Не удалось сохранить файл приложения. Проверьте свободное место на iPhone и повторите загрузку. Если ошибка повторяется, закройте и откройте Feather.")
         } else {
             reportError("Не удалось скачать приложение. Проверьте интернет и попробуйте снова. " + error.localizedDescription)
         }
