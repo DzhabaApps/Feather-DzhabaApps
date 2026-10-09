@@ -8,6 +8,7 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
     static let shared = FeatherAccessManager()
     @Published private(set) var state: FeatherAccessState = .verificationRequired
     @Published private(set) var isChecking = false
+    @Published private(set) var hasChecked = false
     @Published private(set) var expiresAt: Date?
     private let lock = NSLock()
     private let configuration: FeatherAccessConfiguration?
@@ -127,7 +128,10 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
         lock.unlock()
         if let newCache, let data = try? JSONEncoder().encode(newCache) { writeKeychain(data) }
         publish()
-        DispatchQueue.main.async { [weak self] in self?.isChecking = false }
+        DispatchQueue.main.async { [weak self] in
+            self?.hasChecked = true
+            self?.isChecking = false
+        }
     }
 
     func refresh(force: Bool = false) async {

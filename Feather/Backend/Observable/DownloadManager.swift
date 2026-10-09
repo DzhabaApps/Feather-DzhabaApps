@@ -204,6 +204,34 @@ class DownloadManager: NSObject, ObservableObject {
         try? Data((previous + message + "\n").utf8).write(to: file, options: .atomic)
     }
 
+    @MainActor
+    func runPreviewCancellationChecks() async {
+        guard Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview",
+              ProcessInfo.processInfo.environment["FIZER_PREVIEW_SCREEN"] == "cancellation-check" else { return }
+        for _ in 0..<100 {
+            if !isRestoring { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let id = "preview-cancel-" + UUID().uuidString
+        let original = enqueue(Download(id: id, url: URL(string: "http://127.0.0.1:1/cancel.ipa")!))
+        cancelDownload(original)
+        processForegroundDownloads()
+        var result = ["transferRemoved": getDownload(by: id) == nil,
+                      "noRestore": !BackgroundDownloadStore().records().contains { $0.id == id }]
+        let replacement = startArchive(from: URL(fileURLWithPath: "/cancelled.ipa"), id: id)
+        finish(original)
+        result["lateCompletionIgnored"] = getDownload(by: id) === replacement
+        cancelDownload(replacement)
+        let handler = AppFileHandler(file: replacement.url, download: replacement)
+        do { try await handler.copy(); result["importStopped"] = false }
+        catch is CancellationError { result["importStopped"] = true }
+        catch { result["importStopped"] = false }
+        try? await handler.clean()
+        if let data = try? JSONSerialization.data(withJSONObject: result) {
+            try? data.write(to: URL.documentsDirectory.appendingPathComponent("cancellation-validation.json"), options: .atomic)
+        }
+    }
+
     private func beginTask(_ download: Download, record: BackgroundDownloadRecord) {
         var attempt = record
         attempt.attempt = UUID()
@@ -236,11 +264,11 @@ class DownloadManager: NSObject, ObservableObject {
 
     func cancelDownload(_ download: Download) {
         download.cancellation.cancel()
+        download.task?.cancel()
         if let record = records[download.id] {
             do { try store.cancel(record) }
             catch { reportError("Не удалось сохранить отмену. Повторите отмену перед закрытием Feather."); return }
         }
-        download.task?.cancel()
         finish(download)
     }
     private func finish(_ download: Download, success: Bool = false) {
@@ -297,6 +325,7 @@ class DownloadManager: NSObject, ObservableObject {
         guard !isRestoring, UIApplication.shared.applicationState == .active else { return }
         if let message = pendingError { pendingError = nil; reportError(message) }
         for download in downloads {
+            guard !download.cancellation.isCancelled else { continue }
             guard let record = records[download.id], !processing.contains(download.id) else { continue }
             startProgress(download)
             if download.task?.state == .suspended { download.task?.resume(); updateAudioRuntime() }

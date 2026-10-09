@@ -88,6 +88,8 @@ struct FeatherApp: App {
 		switch screen {
 		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
+        case "access-checking": FeatherAccessView(access: access)
+        case "cancellation-check": LibraryView().task { await DownloadManager.shared.runPreviewCancellationChecks() }
 		case "library": LibraryView().onAppear { PreviewLibraryChecks.seedReadyApp() }
         case "copies": CopyChoicePreview(creating: false)
         case "new-copy": CopyChoicePreview(creating: true)

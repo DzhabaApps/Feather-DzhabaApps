@@ -5,27 +5,30 @@ struct FeatherAccessView: View {
     var previewState: FeatherAccessState? = nil
     var previewExpiry: Date? = nil
     private var currentState: FeatherAccessState { previewState ?? access.state }
+    private var waiting: Bool { previewState == nil && (access.isChecking || !access.hasChecked) }
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: currentState == .expired ? "clock.badge.exclamationmark" : "leaf.fill")
                 .font(.system(size: 52)).foregroundStyle(.secondary)
-            if access.isChecking && currentState == .verificationRequired {
+            if waiting {
                 ProgressView()
                 Text("Проверяем доступ…").font(.title2.bold())
             } else {
                 Text(title).font(.title2.bold()).multilineTextAlignment(.center)
                 Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
-            if let expiry = previewExpiry ?? access.expiresAt {
+            if !waiting, let expiry = previewExpiry ?? access.expiresAt {
                 Text("Подписка до \(SubscriptionPresentation.expiry(expiry))")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            if !waiting {
             Button { Task { await access.refresh(force: true) } } label: {
                 if access.isChecking { ProgressView() } else { Text("Повторить проверку") }
             }.buttonStyle(.borderedProminent).disabled(access.isChecking)
             Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
                 .buttonStyle(.bordered)
             Link("Связаться с поддержкой", destination: URL(string: "https://t.me/dzhabaraduev")!)
+            }
         }
         .padding(28).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(UIColor.systemBackground).ignoresSafeArea())
