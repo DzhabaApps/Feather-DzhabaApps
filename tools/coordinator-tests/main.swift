@@ -191,7 +191,7 @@ installer.install(signedCopy, copy: copyTwo)
 check(FR.calls == callsBeforeRetry + 1 && FR.lastApp?.uuid == copyOriginal.uuid && FR.lastOptions?.appIdentifier == copyTwo.identifier, "Different copy must be prepared from the common original")
 let wrongResult = store.makeApp("Signed", source: copySource)
 FR.pending!(nil, wrongResult)
-check(installer.installApp == nil && wrongResult.isDeleted && !copyOriginal.isDeleted, "Wrong signer identity must never install or destroy the source")
+check(installer.installApp == nil && wrongResult.managedObjectContext == nil && copyOriginal.managedObjectContext != nil, "Wrong signer identity must never install or destroy the source")
 
 let newSource = RepositoryFileIdentity.sourceURL(downloadURL: URL(string: "https://example.com/copy-v2.ipa")!, version: "2")
 let newOriginal = store.makeApp("Imported", source: newSource)

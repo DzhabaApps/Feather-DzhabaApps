@@ -21,6 +21,9 @@ struct AppInstallationChoiceView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    LabeledContent("Версия для установки", value: request.app.version ?? "Неизвестна")
+                }
                 if isCreating {
                     Section("Название копии") {
                         TextField("Например, Рабочий WhatsApp", text: $name)
