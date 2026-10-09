@@ -62,3 +62,19 @@ let after = LocalAppFiles.snapshot(documents: documents, temporary: temporary, t
 assert(after.apps == 0 && after.work == 0 && after.archives == 400 && after.other == 100 && after.total == 1400)
 try Data([1]).write(to: system.appendingPathComponent("next-download.tmp"))
 print("Storage regression: accurate breakdown, orphan cleanup, session-folder reuse, credentials/archives/transfers preservation passed")
+
+// A cancellation survives process restoration, including failed byte cleanup.
+try store.save(first)
+try store.cancel(first)
+assert(BackgroundDownloadStore(root: store.root).records().isEmpty)
+var tombstone = first
+tombstone.cancelled = true
+try store.save(tombstone)
+assert(BackgroundDownloadStore(root: store.root).records().isEmpty)
+let cancellation = DownloadCancellation()
+assert(!cancellation.isCancelled)
+try cancellation.check()
+cancellation.cancel()
+assert(cancellation.isCancelled)
+assert((try? cancellation.check()) == nil)
+print("Cancellation: durable stop, ignored tombstones, cooperative import cancellation passed")

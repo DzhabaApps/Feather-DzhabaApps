@@ -20,64 +20,75 @@ struct AppInstallationChoiceView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    LabeledContent("Версия для установки", value: request.app.version ?? "Неизвестна")
-                }
-                if isCreating {
-                    Section("Название копии") {
-                        TextField("Например, Рабочий WhatsApp", text: $name)
-                            .focused($nameFocused)
-                            .submitLabel(.done)
-                            .onSubmit(create)
-                        Text("\(name.count)/60").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Section {
-                        Button("Создать и установить", action: create)
-                            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 60 || loadFailed)
-                    } footer: {
-                        Text("Копия установится отдельно. Для обновления выбирайте её название в этом же меню.")
-                    }
-                } else {
-                    Section {
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 12) {
+                        FRAppIconView(app: request.app, size: 80)
+                        Text(request.originalName).font(.title2.bold()).multilineTextAlignment(.center)
+                        Text("Версия \(request.app.version ?? "Неизвестна")")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }.padding(.top, 16)
+                    if isCreating {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Название копии").font(.headline)
+                            TextField("Например, Рабочий WhatsApp", text: $name)
+                                .textFieldStyle(.roundedBorder).focused($nameFocused)
+                                .submitLabel(.done).onSubmit(create)
+                            Text("Отдельное приложение со своим названием. Позже вы сможете обновить его здесь.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button(action: create) {
+                            Text("Создать и установить").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }.buttonStyle(.borderedProminent).controlSize(.large)
+                            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || name.count > 60)
+                    } else {
                         Button { installer.selectInstallation(request) } label: {
-                            Label("Обычная установка", systemImage: "arrow.down.app")
-                        }
-                    } footer: {
-                        Text("Установка с исходным идентификатором приложения. Если оно уже установлено, iOS попробует его обновить.")
-                    }
-                    if !copies.isEmpty {
-                        Section {
-                            ForEach(copies) { copy in
-                                Button { installer.selectInstallation(request, copy: copy) } label: {
-                                    Label("Обновить «\(copy.name)»", systemImage: "arrow.triangle.2.circlepath")
-                                }
-                                .contextMenu {
-                                    Button("Забыть копию", role: .destructive) { copyToForget = copy }
-                                }
-                                .swipeActions {
-                                    Button("Забыть", role: .destructive) { copyToForget = copy }
-                                }
-                            }
-                        } header: { Text("Ваши копии") } footer: {
-                            Text("Выберите копию для установки скачанной версии. Если копия удалена с iPhone, она установится снова. Этот список сохраняется после очистки файлов Fizer.")
-                        }
-                    }
-                    Section {
+                            Label("Установить приложение", systemImage: "arrow.down.app.fill")
+                                .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        }.buttonStyle(.borderedProminent).controlSize(.large)
                         Button {
                             isCreating = true
                             nameFocused = true
                         } label: {
-                            Label("Создать новую копию", systemImage: "plus.square.on.square")
+                            HStack(spacing: 14) {
+                                Image(systemName: "plus.square.on.square").font(.title2)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Создать копию").font(.headline)
+                                    Text("Отдельное приложение со своим названием")
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right").font(.footnote)
+                            }.padding(16).background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+                        }.buttonStyle(.plain)
+                        if !copies.isEmpty {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Ваши копии").font(.headline)
+                                VStack(spacing: 0) {
+                                    ForEach(copies) { copy in
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "square.on.square").foregroundStyle(Color.accentColor)
+                                            Text(copy.name).font(.subheadline.weight(.medium)).frame(maxWidth: .infinity, alignment: .leading)
+                                            Button("Обновить") { installer.selectInstallation(request, copy: copy) }
+                                                .font(.subheadline.weight(.semibold)).buttonStyle(.bordered)
+                                        }.padding(14)
+                                        .contextMenu {
+                                            Button("Забыть копию", role: .destructive) { copyToForget = copy }
+                                        }
+                                        if copy.id != copies.last?.id { Divider().padding(.leading, 14) }
+                                    }
+                                }.background(Color(UIColor.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+                                Text("Обновление установит скачанную версию в выбранную копию.")
+                                    .font(.footnote).foregroundStyle(.secondary)
+                            }
                         }
-                    } footer: {
-                        Text("Копии занимают дополнительное место на iPhone. В отдельных приложениях вход, уведомления и другие функции могут работать иначе.")
+                        Text("В копиях некоторые функции приложения могут быть недоступны.")
+                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }
-                }
-                if let message {
-                    Section { Text(message).foregroundStyle(.red) }
-                }
+                    if let message { Text(message).font(.footnote).foregroundStyle(.red) }
+                }.padding(24)
             }
+            .background(Color(UIColor.systemGroupedBackground))
             .disabled(loadFailed)
             .navigationTitle(isCreating ? "Новая копия" : "Установка")
             .navigationBarTitleDisplayMode(.inline)
@@ -106,7 +117,7 @@ struct AppInstallationChoiceView: View {
                     }
                 }
             } message: {
-                Text("Копия исчезнет из списка Fizer. Приложение и его данные на iPhone останутся. Её номер больше не будет использоваться для новых копий.")
+                Text("Копия исчезнет из списка Feather. Приложение и его данные на iPhone останутся. Её номер больше не будет использоваться для новых копий.")
             }
         }
     }

@@ -8,6 +8,7 @@ struct BackgroundDownloadRecord: Codable {
     let source: URL
     let displayName: String
     var attempt: UUID? = nil
+    var cancelled: Bool? = nil
 }
 
 final class BackgroundDownloadStore {
@@ -28,7 +29,8 @@ final class BackgroundDownloadStore {
             .compactMap { url in
                 guard let data = try? Data(contentsOf: url),
                       let record = try? JSONDecoder().decode(BackgroundDownloadRecord.self, from: data),
-                      url.lastPathComponent == record.token.uuidString + ".json" else { return nil }
+                      url.lastPathComponent == record.token.uuidString + ".json",
+                      record.cancelled != true else { return nil }
                 return record
             }
     }
@@ -50,7 +52,23 @@ final class BackgroundDownloadStore {
         if FileManager.default.fileExists(atPath: directory.path) { try FileManager.default.removeItem(at: directory) }
         if FileManager.default.fileExists(atPath: metadataURL(record).path) { try FileManager.default.removeItem(at: metadataURL(record)) }
     }
+    func cancel(_ record: BackgroundDownloadRecord) throws {
+        // Persist the user's decision before deleting bytes. A failed cleanup must
+        // never turn a cancelled download into a new attempt on the next launch.
+        var tombstone = record
+        tombstone.cancelled = true
+        try save(tombstone)
+        try? remove(tombstone)
+    }
     private func metadataURL(_ record: BackgroundDownloadRecord) -> URL {
         root.appendingPathComponent(record.token.uuidString + ".json")
     }
+}
+
+final class DownloadCancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    func cancel() { lock.lock(); cancelled = true; lock.unlock() }
+    func check() throws { if isCancelled { throw CancellationError() } }
 }

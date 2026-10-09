@@ -94,7 +94,7 @@ struct StorageSettingsView: View {
             switch self {
             case .apps: return "Копии приложений в библиотеке будут удалены. Для повторной установки их нужно скачать заново. Приложения на iPhone, иконки магазина и подписка сохранятся."
             case .work: return "Будут удалены остатки подготовки и установки. Скачанные приложения, иконки магазина и подписка сохранятся."
-            case .archives: return "Будут удалены архивы, сохранённые при экспорте из Fizer. Приложения на iPhone и файлы библиотеки сохранятся."
+            case .archives: return "Будут удалены архивы, сохранённые при экспорте из Feather. Приложения на iPhone и файлы библиотеки сохранятся."
             }
         }
     }
@@ -103,7 +103,7 @@ struct StorageSettingsView: View {
         NBList(.localized("Storage")) {
             Section {
                 LabeledContent("Локальные файлы", value: formatted(files.total + iconBytes))
-            } footer: { Text("Это файлы внутри Fizer. Установленные на iPhone приложения занимают место отдельно.") }
+            } footer: { Text("Это файлы внутри Feather. Установленные на iPhone приложения занимают место отдельно.") }
             Section {
                 LabeledContent("Скачанные приложения", value: formatted(files.apps))
                 LabeledContent("Сохранённые архивы", value: formatted(files.archives))

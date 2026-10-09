@@ -7,10 +7,15 @@ struct FeatherAccessView: View {
     private var currentState: FeatherAccessState { previewState ?? access.state }
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: currentState == .expired ? "clock.badge.exclamationmark" : "wifi.exclamationmark")
+            Image(systemName: currentState == .expired ? "clock.badge.exclamationmark" : "leaf.fill")
                 .font(.system(size: 52)).foregroundStyle(.secondary)
-            Text(title).font(.title2.bold()).multilineTextAlignment(.center)
-            Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            if access.isChecking && currentState == .verificationRequired {
+                ProgressView()
+                Text("Проверяем доступ…").font(.title2.bold())
+            } else {
+                Text(title).font(.title2.bold()).multilineTextAlignment(.center)
+                Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
             if let expiry = previewExpiry ?? access.expiresAt {
                 Text("Подписка до \(SubscriptionPresentation.expiry(expiry))")
                     .font(.footnote).foregroundStyle(.secondary)

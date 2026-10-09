@@ -37,13 +37,14 @@ class BackgroundTaskManager: ObservableObject {
                 task.expirationHandler = {
                     DispatchQueue.main.async {
                         guard self.activeTasks[task.identifier] === task else { return }
-                        // iOS can end the in-process runtime. Pause outside foreground;
-                        // keep the intent and resume when the user opens the app.
-                        DownloadManager.shared.suspendForBackgroundExpiration(downloadId)
-                        task.setTaskCompleted(success: false)
-                        self.activeTasks.removeValue(forKey: task.identifier)
-                        self.requested.removeValue(forKey: task.identifier)
-                        DownloadManager.shared.backgroundRuntimeDidChange("continued-expired")
+                        // The system uses the same handler for its Stop button and
+                        // runtime expiration. Neither may silently restart the job.
+                        if let download = DownloadManager.shared.getDownload(by: downloadId) {
+                            DownloadManager.shared.cancelDownload(download)
+                        } else {
+                            self.stopTask(for: downloadId, success: false)
+                        }
+                        DownloadManager.shared.backgroundRuntimeDidChange("continued-stopped")
                     }
                 }
                 DownloadManager.shared.backgroundRuntimeDidChange("continued-active")

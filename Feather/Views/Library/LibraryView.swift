@@ -197,7 +197,7 @@ struct LibraryView: View {
                     }
                     catch { _cacheError = "Не удалось удалить все файлы. Попробуйте снова."; _showCacheError = true }
                 }
-            } message: { Text("Файлы в библиотеке Fizer будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
+            } message: { Text("Файлы в библиотеке Feather будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
             .alert("Хранилище", isPresented: $_showCacheError) { Button("OK", role: .cancel) {} } message: { Text(_cacheError ?? "") }
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
 				TextField(.localized("URL"), text: $_alertDownloadString)

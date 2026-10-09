@@ -36,6 +36,11 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
             .flatMap { Data(base64Encoded: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         if let data = readKeychain(), let saved = try? JSONDecoder().decode(Cache.self, from: data),
            !saved.boot.isEmpty, saved.boot == Self.bootIdentity() { cache = saved }
+        // Restore verified access before SwiftUI renders its first frame.
+        let initial = snapshot()
+        state = initial.0
+        expiresAt = initial.1
+        isChecking = configuration != nil && initial.0 == .verificationRequired
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.publish()

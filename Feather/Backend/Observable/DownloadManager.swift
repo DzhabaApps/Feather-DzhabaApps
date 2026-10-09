@@ -11,6 +11,7 @@ import UIKit
 import BackgroundTasks
 
 class Download: Identifiable, @unchecked Sendable {
+    let cancellation = DownloadCancellation()
 	@Published var progress: Double = 0.0
 	@Published var bytesDownloaded: Int64 = 0
 	@Published var totalBytes: Int64 = 0
@@ -234,10 +235,16 @@ class DownloadManager: NSObject, ObservableObject {
     }
 
     func cancelDownload(_ download: Download) {
+        download.cancellation.cancel()
+        if let record = records[download.id] {
+            do { try store.cancel(record) }
+            catch { reportError("Не удалось сохранить отмену. Повторите отмену перед закрытием Feather."); return }
+        }
         download.task?.cancel()
         finish(download)
     }
     private func finish(_ download: Download, success: Bool = false) {
+        guard getDownload(by: download.id) === download else { return }
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) { BackgroundTaskManager.shared.stopTask(for: download.id, success: success) }
         #endif
@@ -313,7 +320,7 @@ class DownloadManager: NSObject, ObservableObject {
 extension DownloadManager: URLSessionDownloadDelegate {
     func handlePachageFile(url: URL, dl: Download, completion: (() -> Void)? = nil) throws {
         FR.handlePackageFile(url, download: dl) { error in
-            if let error { self.reportError(error.localizedDescription) }
+            if let error, !dl.cancellation.isCancelled { self.reportError(error.localizedDescription) }
             if dl.id == "background-integration", Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" {
                 let result = ["imported": error == nil, "source": dl.source.absoluteString] as [String: Any]
                 if let data = try? JSONSerialization.data(withJSONObject: result) {
