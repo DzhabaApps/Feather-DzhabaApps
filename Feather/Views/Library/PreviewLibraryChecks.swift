@@ -24,7 +24,7 @@ enum PreviewLibraryChecks {
             if !DownloadManager.shared.isRestoring { break }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        var result = ["cleared": false, "credentialsPreserved": false, "systemTemporaryPreserved": false, "iconsPreserved": false, "orphansRemoved": false]
+        var result = ["cleared": false, "credentialsPreserved": false, "systemTemporaryPreserved": false, "iconsPreserved": false, "orphansRemoved": false, "copiesPreserved": false]
         do {
             guard !DownloadManager.shared.isRestoring, DownloadManager.shared.downloads.isEmpty, !RepositoryInstallCoordinator.shared.isBusy else { throw CocoaError(.fileWriteUnknown) }
             let context = Storage.shared.context
@@ -52,9 +52,12 @@ enum PreviewLibraryChecks {
             let icon = Data("cached-catalog-icon".utf8)
             guard let imageCache = ImagePipeline.shared.configuration.dataCache else { throw CocoaError(.fileReadUnknown) }
             imageCache.storeData(icon, for: "Fizer.CacheTest.Icon")
+            let savedCopies = try AppCopyStore.shared.allCopies()
+            guard !savedCopies.isEmpty else { throw CocoaError(.fileReadUnknown) }
             try Storage.shared.clearDownloadedApps()
             // Exercise the actual public work-cleaning entry point too.
             ResetView.clearWorkCache()
+            result["copiesPreserved"] = try AppCopyStore.shared.allCopies() == savedCopies
             result["cleared"] = try count("Imported") == 0 && count("Signed") == 0
             result["orphansRemoved"] = !FileManager.default.fileExists(atPath: orphan.path)
             result["systemTemporaryPreserved"] = (try Data(contentsOf: systemFile)) == Data("session-state".utf8)

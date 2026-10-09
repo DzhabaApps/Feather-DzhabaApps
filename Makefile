@@ -21,8 +21,10 @@ verify:
 	/tmp/feather-access-tests
 	xcrun swiftc Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/DownloadPresentation.swift tools/identity-tests/main.swift -o /tmp/fizer-identity-tests
 	/tmp/fizer-identity-tests
-	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/RepositoryInstallCoordinator.swift tools/coordinator-tests/main.swift -o /tmp/fizer-coordinator-tests
+	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Storage/AppCopyStore.swift Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/RepositoryInstallCoordinator.swift tools/coordinator-tests/main.swift -o /tmp/fizer-coordinator-tests
 	/tmp/fizer-coordinator-tests
+	xcrun swiftc -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Storage/AppCopyStore.swift Feather/Backend/Storage/LocalAppFiles.swift tools/copy-tests/main.swift -o /tmp/fizer-copy-tests
+	/tmp/fizer-copy-tests
 
 preview-screenshots:
 	python3 tools/capture_preview.py

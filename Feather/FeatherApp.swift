@@ -62,6 +62,9 @@ struct FeatherApp: App {
 					}
 				}
 			}
+			.sheet(item: $repositoryInstaller.installRequest, onDismiss: repositoryInstaller.finishInstallationChoice) { request in
+				AppInstallationChoiceView(request: request, installer: repositoryInstaller)
+			}
 			.sheet(item: $repositoryInstaller.installApp) { app in
 				InstallPreviewView(app: app.base)
 					.presentationDetents([.height(220)])
@@ -86,6 +89,8 @@ struct FeatherApp: App {
 		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
 		case "library": LibraryView().onAppear { PreviewLibraryChecks.seedReadyApp() }
+        case "copies": CopyChoicePreview(creating: false)
+        case "new-copy": CopyChoicePreview(creating: true)
         case "cache-check": LibraryView().task { await PreviewLibraryChecks.clearAndCheck() }
         case "background-transfer": LibraryView().onAppear { DownloadManager.shared.startPreviewTransfer() }
         case "store-news": SourcesView(previewCategory: .all, previewNews: true)

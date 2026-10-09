@@ -128,7 +128,7 @@ extension LibraryCellView {
 				}
 			}
 			Button(.localized("Install"), systemImage: "square.and.arrow.down") {
-				installer.install(app)
+				installer.chooseInstallation(app)
 			}
 
 			Button(.localized("Export"), systemImage: "square.and.arrow.up") {
@@ -136,7 +136,7 @@ extension LibraryCellView {
 			}
 		} else {
 			Button(.localized("Install"), systemImage: "square.and.arrow.down") {
-				installer.install(app)
+				installer.chooseInstallation(app)
 			}
 
 		}
@@ -145,7 +145,7 @@ extension LibraryCellView {
 	@ViewBuilder
 	private func _buttonActions(for app: AppInfoPresentable) -> some View {
 		Button {
-			installer.install(app)
+			installer.chooseInstallation(app)
 		} label: {
 			Text(.localized("Install"))
 				.font(.subheadline.bold()).lineLimit(1).minimumScaleFactor(0.8)
