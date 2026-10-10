@@ -94,7 +94,7 @@ struct SSLUpdateSection: View {
 				}
 			}
 			.disabled(isUpdating)
-		} footer: { Text("Если подписанное приложение не устанавливается, нажмите здесь, затем повторите установку. Нужен интернет. Если это не помогло, обратитесь в поддержку.") }
+		} footer: { Text(.localized("SSL update explanation")) }
 		.alert("Установка приложений", isPresented: $showResult) {
 			Button(.localized("OK"), role: .cancel) {}
 		} message: {

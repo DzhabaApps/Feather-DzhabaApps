@@ -89,8 +89,10 @@ final class Storage {
 enum FR {
 	static var pending: ((Error?, Signed?) -> Void)?
 	static var calls = 0
+	static var lastOptions: Options?
+	static var lastApp: AppInfoPresentable?
 	static func signPackageFile(_ app: AppInfoPresentable, using options: Options, icon: Any?, certificate: CertificatePair?, completion: @escaping (Error?, Signed?) -> Void) {
-		calls += 1; pending = completion
+		calls += 1; pending = completion; lastOptions = options; lastApp = app
 	}
 }
 enum UIAlertController {
@@ -102,7 +104,8 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) { if !condit
 
 let store = Storage.shared
 defer { try? FileManager.default.removeItem(at: store.root) }
-let installer = RepositoryInstallCoordinator.shared
+let copies = AppCopyStore(fileURL: store.root.appendingPathComponent("copies.json"))
+let installer = RepositoryInstallCoordinator(copies: copies)
 let source = RepositoryFileIdentity.sourceURL(downloadURL: URL(string: "https://example.com/a.ipa")!, version: "1")
 let otherSource = RepositoryFileIdentity.sourceURL(downloadURL: URL(string: "https://example.com/b.ipa")!, version: "1")
 let original = store.makeApp("Imported", source: source)
@@ -146,3 +149,77 @@ let replacement = store.makeApp("Signed", source: source)
 FR.pending!(nil, replacement)
 check(installer.installApp?.base.uuid == replacement.uuid, "Certificate replacement must install the new signed result")
 print("Repository coordinator: 13 checks passed")
+
+installer.installApp = nil
+store.signedCertificate = store.certificate
+let copySource = RepositoryFileIdentity.sourceURL(downloadURL: URL(string: "https://example.com/copy-v1.ipa")!, version: "1")
+let copyOriginal = store.makeApp("Imported", source: copySource)
+let copyOne = try copies.create(originalIdentifier: "example.app", name: "Рабочий")
+let copyTwo = try copies.create(originalIdentifier: "example.app", name: "Личный")
+OptionsManager.shared.options.ppqProtection = true
+store.certificate!.ppQCheck = true
+OptionsManager.shared.options.identifiers = ["example.app": "legacy.replacement"]
+OptionsManager.shared.options.displayNames = ["Example": "Legacy name"]
+let beforeChoice = FR.calls
+installer.chooseInstallation(copyOriginal)
+check(installer.isBusy && FR.calls == beforeChoice, "Choice must not start a signer")
+let choice = installer.installRequest!
+installer.chooseInstallation(copyOriginal)
+check(installer.installRequest?.id == choice.id, "Repeated taps must not replace the choice")
+installer.selectInstallation(choice, copy: copyOne)
+check(FR.calls == beforeChoice && installer.isBusy, "Wait for sheet dismissal before signing")
+installer.finishInstallationChoice()
+check(FR.calls == beforeChoice + 1 && FR.lastOptions?.appIdentifier == copyOne.identifier && FR.lastOptions?.appName == copyOne.name, "Saved identity overrides PPQ and global dictionaries")
+installer.finishInstallationChoice()
+check(FR.calls == beforeChoice + 1, "Dismissal callback must not duplicate signing")
+FR.pending!(NSError(domain: "test", code: 1), nil)
+let savedAfterFailure = try copies.copies(for: "example.app")
+check(savedAfterFailure.contains(copyOne), "Signing failure keeps identity for a retry")
+installer.install(copyOriginal, copy: copyOne)
+let signedCopy = store.makeApp("Signed", source: copySource)
+signedCopy.identifier = copyOne.identifier; signedCopy.name = copyOne.name
+try store.context.save()
+FR.pending!(nil, signedCopy)
+check(installer.installApp?.base.uuid == signedCopy.uuid && !copyOriginal.isDeleted, "Copy signing installs exact result and retains common original")
+check(installer.libraryApp(for: copySource)?.uuid == copyOriginal.uuid, "Catalog must select original, never a prepared clone")
+installer.installApp = nil
+let callsBeforeRetry = FR.calls
+installer.install(signedCopy, copy: copyOne)
+check(FR.calls == callsBeforeRetry && installer.installApp?.base.uuid == signedCopy.uuid, "Same prepared copy can retry installation without signing")
+installer.installApp = nil
+installer.install(signedCopy, copy: copyTwo)
+check(FR.calls == callsBeforeRetry + 1 && FR.lastApp?.uuid == copyOriginal.uuid && FR.lastOptions?.appIdentifier == copyTwo.identifier, "Different copy must be prepared from the common original")
+let wrongResult = store.makeApp("Signed", source: copySource)
+FR.pending!(nil, wrongResult)
+check(installer.installApp == nil && wrongResult.managedObjectContext == nil && copyOriginal.managedObjectContext != nil, "Wrong signer identity must never install or destroy the source")
+
+let newSource = RepositoryFileIdentity.sourceURL(downloadURL: URL(string: "https://example.com/copy-v2.ipa")!, version: "2")
+let newOriginal = store.makeApp("Imported", source: newSource)
+installer.install(newOriginal, copy: copyOne)
+check(FR.lastApp?.uuid == newOriginal.uuid && FR.lastOptions?.appIdentifier == copyOne.identifier && FR.lastOptions?.appName == copyOne.name, "New catalog version updates the same copy with its permanent identity")
+let updated = store.makeApp("Signed", source: newSource)
+updated.identifier = copyOne.identifier; updated.name = copyOne.name
+try store.context.save()
+FR.pending!(nil, updated)
+installer.installApp = nil
+try copies.forget(copyOne)
+let beforeForgotten = FR.calls
+installer.install(newOriginal, copy: copyOne)
+check(FR.calls == beforeForgotten && !installer.isBusy, "Stale selection of a forgotten copy must fail")
+let anotherApp = store.makeApp("Imported", source: otherSource)
+anotherApp.identifier = "other.application"
+installer.install(anotherApp, copy: copyTwo)
+check(FR.calls == beforeForgotten, "A copy cannot be applied to a different original app")
+store.context.delete(copyOriginal); try store.context.save()
+check(installer.libraryApp(for: copySource) == nil, "A clone alone must not suppress redownloading its source")
+installer.install(signedCopy)
+check(installer.installApp == nil && FR.calls == beforeForgotten, "Ordinary install must never silently use a clone when its original is missing")
+FeatherAccessManager.shared.allowed = false
+installer.chooseInstallation(newOriginal)
+check(installer.installRequest == nil && !installer.isBusy, "Subscription gate also protects copy choices")
+FeatherAccessManager.shared.allowed = true
+installer.chooseInstallation(newOriginal)
+installer.installRequest = nil
+installer.finishInstallationChoice()
+check(!installer.isBusy && FR.calls == beforeForgotten, "Cancel choice must not install anything")
+print("Copy coordinator: 18 checks passed")

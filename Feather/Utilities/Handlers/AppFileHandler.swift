@@ -19,6 +19,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	private var _ipa: URL
 	private let _install: Bool
 	private let _download: Download?
+    private var committed = false
 	
 	init(
 		file ipa: URL,
@@ -36,6 +37,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	}
 	
 	func copy() async throws {
+        try _download?.cancellation.check()
 		try _fileManager.createDirectoryIfNeeded(at: _uniqueWorkDir)
 		
 		let destinationURL = _uniqueWorkDir.appendingPathComponent(_ipa.lastPathComponent)
@@ -48,6 +50,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	}
 	
 	func extract() async throws {
+        try _download?.cancellation.check()
 		if _ipa.pathExtension == "ipa" {
 			Zip.addCustomFileExtension("ipa")
 		}
@@ -80,6 +83,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 						}
 					)
 					
+                    try download?.cancellation.check()
 					self.uniqueWorkDirPayload = self._uniqueWorkDir.appendingPathComponent("Payload")
 					continuation.resume()
 				} catch {
@@ -90,6 +94,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	}
 	
 	func move() async throws {
+        try _download?.cancellation.check()
 		guard let payloadURL = uniqueWorkDirPayload else {
 			throw ImportedFileHandlerError.payloadNotFound
 		}
@@ -115,7 +120,8 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 		
 		let bundle = Bundle(url: appUrl)
 		
-		await MainActor.run {
+        try await MainActor.run {
+        try _download?.cancellation.check()
 		Storage.shared.addImported(
 			uuid: _uuid,
 			source: _download?.source,
@@ -126,6 +132,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 		) { _ in
 			Logger.misc.info("[\(self._uuid)] Added to database")
 		}
+        committed = true
 		}
 	}
 	
@@ -135,6 +142,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 	}
 	
 	func clean() async throws {
+		if !committed { try? _fileManager.removeFileIfNeeded(at: _fileManager.unsigned(_uuid)) }
 		try _fileManager.removeFileIfNeeded(at: _uniqueWorkDir)
 	}
 }

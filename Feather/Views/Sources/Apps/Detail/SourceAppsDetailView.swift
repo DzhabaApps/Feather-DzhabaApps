@@ -67,7 +67,7 @@ struct SourceAppsDetailView: View {
 				_infoPills(app: app)
 				Divider()
                 
-				if let screenshotURLs = app.screenshotURLs {
+				if let screenshotURLs = app.screenshotURLs, !screenshotURLs.isEmpty {
 					NBSection(.localized("Screenshots")) {
 						_screenshots(screenshotURLs: screenshotURLs)
 					}
@@ -112,14 +112,6 @@ struct SourceAppsDetailView: View {
                 
 				NBSection(.localized("Information")) {
 					VStack(spacing: 12) {
-						if let sourceName = source.name {
-							_infoRow(title: .localized("Source"), value: sourceName)
-						}
-                        
-						if let developer = app.developer {
-							_infoRow(title: .localized("Developer"), value: developer)
-						}
-						
 						if let size = app.size {
 							_infoRow(title: .localized("Size"), value: size.formattedByteCount)
 						}
@@ -134,45 +126,11 @@ struct SourceAppsDetailView: View {
 							_infoRow(title: .localized("Updated"), value: DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .none))
 						}
 						
-						if let bundleId = app.id {
-							_infoRow(title: .localized("Identifier"), value: bundleId)
-						}
+
 					}
 				}
 				
-				if let appPermissions = app.appPermissions {
-					NBSection(.localized("Permissions")) {
-						Group {
-							if let entitlements = appPermissions.entitlements {
-								NBTitleWithSubtitleView(
-									title: .localized("Entitlements"),
-									subtitle: entitlements.map(\.name).joined(separator: "\n")
-								)
-							} else {
-								Text(.localized("No Entitlements listed."))
-									.font(.subheadline)
-									.foregroundStyle(.secondary)
-							}
-							if let privacyItems = appPermissions.privacy {
-								ForEach(privacyItems, id: \.self) { item in
-									NBTitleWithSubtitleView(
-										title: item.name,
-										subtitle: item.usageDescription
-									)
-								}
-							} else {
-								Text(.localized("No Privacy Permissions listed."))
-									.font(.subheadline)
-									.foregroundStyle(.secondary)
-							}
-						}
-						.padding()
-						.background(
-							RoundedRectangle(cornerRadius: 18, style: .continuous)
-								.fill(Color(.quaternarySystemFill))
-						)
-					}
-				}
+
 			}
 			.padding([.horizontal, .bottom])
 			.padding(.top, {
@@ -200,7 +158,7 @@ struct SourceAppsDetailView: View {
 			}
 		}
 		.fullScreenCover(isPresented: $_isScreenshotPreviewPresented) {
-			if let screenshotURLs = app.screenshotURLs {
+			if let screenshotURLs = app.screenshotURLs, !screenshotURLs.isEmpty {
 				ScreenshotPreviewView(
 					screenshotURLs: screenshotURLs,
 					initialIndex: _selectedScreenshotIndex

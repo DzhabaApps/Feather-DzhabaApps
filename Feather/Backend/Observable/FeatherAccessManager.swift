@@ -8,6 +8,7 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
     static let shared = FeatherAccessManager()
     @Published private(set) var state: FeatherAccessState = .verificationRequired
     @Published private(set) var isChecking = false
+    @Published private(set) var hasChecked = false
     @Published private(set) var expiresAt: Date?
     private let lock = NSLock()
     private let configuration: FeatherAccessConfiguration?
@@ -36,6 +37,11 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
             .flatMap { Data(base64Encoded: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
         if let data = readKeychain(), let saved = try? JSONDecoder().decode(Cache.self, from: data),
            !saved.boot.isEmpty, saved.boot == Self.bootIdentity() { cache = saved }
+        // Restore verified access before SwiftUI renders its first frame.
+        let initial = snapshot()
+        state = initial.0
+        expiresAt = initial.1
+        isChecking = configuration != nil && initial.0 == .verificationRequired
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.publish()
@@ -122,7 +128,10 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
         lock.unlock()
         if let newCache, let data = try? JSONEncoder().encode(newCache) { writeKeychain(data) }
         publish()
-        DispatchQueue.main.async { [weak self] in self?.isChecking = false }
+        DispatchQueue.main.async { [weak self] in
+            self?.hasChecked = true
+            self?.isChecking = false
+        }
     }
 
     func refresh(force: Bool = false) async {

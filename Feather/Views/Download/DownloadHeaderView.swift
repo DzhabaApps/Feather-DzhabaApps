@@ -49,9 +49,13 @@ struct DownloadItemView: View {
 	
 	var body: some View {
 		VStack(alignment: .leading, spacing: 4) {
-			Text(download.displayName)
-				.font(.subheadline)
-				.lineLimit(1)
+			HStack {
+				Text(download.displayName).font(.subheadline).lineLimit(1)
+				Spacer()
+				Button("Отменить", role: .cancel) {
+					DownloadManager.shared.cancelDownload(download)
+				}.font(.caption).buttonStyle(.borderless)
+			}
 			
 			ProgressView(value: overallProgress)
 				.progressViewStyle(.linear)

@@ -44,7 +44,7 @@ struct DownloadButtonView: View {
 				let downloaded = localApp
 				Button {
 					if let downloaded {
-						installer.install(downloaded)
+						installer.chooseInstallation(downloaded)
 					} else if let url = app.currentDownloadUrl, let source {
 						_ = downloadManager.startDownload(from: url, id: source.absoluteString, source: source, displayName: app.name)
 					}

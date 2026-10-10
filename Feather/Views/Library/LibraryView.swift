@@ -14,7 +14,6 @@ struct LibraryView: View {
 	@StateObject var downloadManager = DownloadManager.shared
 	
 	@State private var _selectedInfoAppPresenting: AnyApp?
-	@State private var _selectedSigningAppPresenting: AnyApp?
 	@State private var _selectedInstallAppPresenting: AnyApp?
 	@State private var _isImportingPresenting = false
 	@State private var _isDownloadingPresenting = false
@@ -24,28 +23,47 @@ struct LibraryView: View {
 	@State private var _selectedAppUUIDs: Set<String> = []
 	@State private var _editMode: EditMode = .inactive
 	
-	@State private var _searchText = ""
-	@State private var _selectedScope: Scope = .all
+	@State private var _cacheBytes: Int64 = 0
+    @State private var _showCacheConfirmation = false
+    @State private var _cacheError: String?
+    @State private var _showCacheError = false
+    @ObservedObject private var installer = RepositoryInstallCoordinator.shared
+    private var canClearCache: Bool { !downloadManager.isRestoring && downloadManager.downloads.isEmpty && !installer.isBusy }
+    @State private var _searchText = ""
 	
 	
 	@Namespace private var _namespace
 	
-	// horror
-	private func filteredAndSortedApps<T>(from apps: FetchedResults<T>) -> [T] where T: NSManagedObject {
-		apps.filter {
-			_searchText.isEmpty ||
-				(($0.value(forKey: "name") as? String)?.localizedCaseInsensitiveContains(_searchText) ?? false)
-		}
-	}
-	
-	private var _filteredSignedApps: [Signed] {
-		filteredAndSortedApps(from: _signedApps)
-	}
-	
-	private var _filteredImportedApps: [Imported] {
-		filteredAndSortedApps(from: _importedApps)
-	}
-	
+    private struct LibraryEntry: Identifiable {
+        let id: LibraryAppIdentity
+        let apps: [AppInfoPresentable]
+        var app: AppInfoPresentable { apps[0] }
+    }
+
+    private var libraryEntries: [LibraryEntry] {
+        let apps: [AppInfoPresentable] = _signedApps.map { $0 as AppInfoPresentable } + _importedApps.map { $0 as AppInfoPresentable }
+        let groups = Dictionary(grouping: apps) { app in
+            LibraryAppIdentity(identifier: app.identifier, version: app.version,
+                               source: app.source, uuid: app.uuid ?? (app as! NSManagedObject).objectID.uriRepresentation().absoluteString)
+        }
+        return groups.map { identity, members in
+            LibraryEntry(id: identity, apps: members.sorted {
+                if $0.isSigned != $1.isSigned { return $0.isSigned }
+                return ($0.date ?? .distantPast) > ($1.date ?? .distantPast)
+            })
+        }.filter { entry in
+            _searchText.isEmpty || entry.apps.contains { ($0.name ?? "").localizedCaseInsensitiveContains(_searchText) }
+        }.sorted {
+            let left = $0.apps.compactMap(\.date).max() ?? .distantPast
+            let right = $1.apps.compactMap(\.date).max() ?? .distantPast
+            return left == right ? ($0.app.uuid ?? "") < ($1.app.uuid ?? "") : left > right
+        }
+    }
+
+    private func deleteEntry(_ entry: LibraryEntry) {
+        for app in entry.apps { Storage.shared.deleteApp(for: app) }
+    }
+
 	// MARK: Fetch
 	@FetchRequest(
 		entity: Signed.entity(),
@@ -63,75 +81,47 @@ struct LibraryView: View {
 	var body: some View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
-				if
-					!_filteredSignedApps.isEmpty,
-					_selectedScope == .all || _selectedScope == .signed
-				{
-					NBSection(
-						.localized("Signed"),
-						secondary: _filteredSignedApps.count.description
-					) {
-						ForEach(_filteredSignedApps, id: \.uuid) { app in
-							LibraryCellView(
-								app: app,
-								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
-								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-								selectedAppUUIDs: $_selectedAppUUIDs
-							)
-							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-						}
-					}
-				}
-				
-				if
-					!_filteredImportedApps.isEmpty,
-					_selectedScope == .all || _selectedScope == .imported
-				{
-					NBSection(
-						.localized("Imported"),
-						secondary: _filteredImportedApps.count.description
-					) {
-						ForEach(_filteredImportedApps, id: \.uuid) { app in
-							LibraryCellView(
-								app: app,
-								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-								selectedSigningAppPresenting: $_selectedSigningAppPresenting,
-								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-								selectedAppUUIDs: $_selectedAppUUIDs
-							)
-							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-						}
-					}
-				}
+                Section {
+                    Button { _showCacheConfirmation = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "internaldrive").foregroundStyle(Color.accentColor)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Освободить место").font(.subheadline.weight(.medium))
+                                Text(_cacheBytes > 0 ? "\(ByteCountFormatter.string(fromByteCount: _cacheBytes, countStyle: .file)) · скачанные файлы" : "Нет скачанных файлов")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canClearCache || _cacheBytes == 0)
+                }
+                if libraryEntries.isEmpty {
+                    Text(_searchText.isEmpty ? "Скачайте приложение из магазина — оно появится здесь." : "Ничего не найдено")
+                        .foregroundStyle(.secondary)
+                }
+                if !libraryEntries.isEmpty {
+                    NBSection("Приложения") {
+                        ForEach(libraryEntries) { entry in
+                            LibraryCellView(
+                                app: entry.app,
+                                selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+                                selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+                                selectedAppUUIDs: $_selectedAppUUIDs,
+                                deleteApp: { deleteEntry(entry) }
+                            )
+                            .compatMatchedTransitionSource(id: entry.app.uuid ?? "", ns: _namespace)
+                        }
+                    }
+                }
 			}
+            .task { await updateCacheSize() }
+            .onChange(of: _signedApps.count + _importedApps.count) { _ in Task { await updateCacheSize() } }
 			.searchable(text: $_searchText, placement: .platform())
-			.compatSearchScopes($_selectedScope) {
-				ForEach(Scope.allCases, id: \.displayName) { scope in
-					Text(scope.displayName).tag(scope)
-				}
-			}
 			.scrollDismissesKeyboard(.interactively)
-			.overlay {
-				if
-					_filteredSignedApps.isEmpty,
-					_filteredImportedApps.isEmpty
-				{
-					if #available(iOS 17, *) {
-						ContentUnavailableView {
-							Label(.localized("No Apps"), systemImage: "questionmark.app.fill")
-						} description: {
-							Text(.localized("Get started by importing your first IPA file."))
-						} actions: {
-							Menu {
-								_importActions()
-							} label: {
-								NBButton(.localized("Import"), style: .text)
-							}
-						}
-					}
-				}
-			}
+
 			.toolbar {
 				ToolbarItem(placement: .topBarLeading) {
 					EditButton()
@@ -164,10 +154,7 @@ struct LibraryView: View {
 					.presentationDetents([.height(200)])
 					.presentationDragIndicator(.visible)
 			}
-			.fullScreenCover(item: $_selectedSigningAppPresenting) { app in
-				SigningView(app: app.base)
-					.compatNavigationTransition(id: app.base.uuid ?? "", ns: _namespace)
-			}
+
 			.sheet(isPresented: $_isImportingPresenting) {
 				FileImporterRepresentableView(
 					allowedContentTypes:  [.ipa, .tipa],
@@ -184,6 +171,19 @@ struct LibraryView: View {
 				)
 				.ignoresSafeArea()
 			}
+            .confirmationDialog("Удалить скачанные файлы?", isPresented: $_showCacheConfirmation, titleVisibility: .visible) {
+                Button("Удалить скачанные файлы", role: .destructive) {
+                    guard canClearCache else { return }
+                    do {
+                        try Storage.shared.clearDownloadedApps()
+                        _cacheError = "Скачанные файлы удалены. Приложения на iPhone остались на месте."
+                        _showCacheError = true
+                        Task { await updateCacheSize() }
+                    }
+                    catch { _cacheError = "Не удалось удалить все файлы. Попробуйте снова."; _showCacheError = true }
+                }
+            } message: { Text("Файлы в библиотеке Feather будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
+            .alert("Хранилище", isPresented: $_showCacheError) { Button("OK", role: .cancel) {} } message: { Text(_cacheError ?? "") }
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
 				TextField(.localized("URL"), text: $_alertDownloadString)
 					.textInputAutocapitalization(.never)
@@ -210,6 +210,13 @@ struct LibraryView: View {
 	}
 }
 
+extension LibraryView {
+    private func updateCacheSize() async {
+        let snapshot = await Task.detached(priority: .utility) { LocalAppFiles.snapshot() }.value
+        _cacheBytes = snapshot.apps + snapshot.work
+    }
+}
+
 // MARK: - Extension: View
 extension LibraryView {
 	@ViewBuilder
@@ -225,49 +232,11 @@ extension LibraryView {
 
 // MARK: - Extension: Bulk Delete
 extension LibraryView {
-	private func _bulkDeleteSelectedApps() {
-		let selectedApps = _getAllApps().filter { app in
-			guard let uuid = app.uuid else { return false }
-			return _selectedAppUUIDs.contains(uuid)
-		}
-		
-		for app in selectedApps {
-			Storage.shared.deleteApp(for: app)
-		}
-		
-		_selectedAppUUIDs.removeAll()
-		
-		// _editMode = .inactive
-	}
-	
-	private func _getAllApps() -> [AppInfoPresentable] {
-		var allApps: [AppInfoPresentable] = []
-		
-		if _selectedScope == .all || _selectedScope == .signed {
-			allApps.append(contentsOf: _filteredSignedApps)
-		}
-		
-		if _selectedScope == .all || _selectedScope == .imported {
-			allApps.append(contentsOf: _filteredImportedApps)
-		}
-		
-		return allApps
-	}
-}
-
-// MARK: - Extension: View (Sort)
-extension LibraryView {
-	enum Scope: CaseIterable {
-		case all
-		case signed
-		case imported
-		
-		var displayName: String {
-			switch self {
-			case .all: return .localized("All")
-			case .signed: return .localized("Signed")
-			case .imported: return .localized("Imported")
-			}
-		}
-	}
+    private func _bulkDeleteSelectedApps() {
+        let selected = libraryEntries.filter { entry in
+            entry.app.uuid.map { _selectedAppUUIDs.contains($0) } ?? false
+        }
+        for entry in selected { deleteEntry(entry) }
+        _selectedAppUUIDs.removeAll()
+    }
 }
