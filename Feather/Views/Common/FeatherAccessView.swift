@@ -18,7 +18,7 @@ struct FeatherAccessView: View {
                 Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             if !waiting, let expiry = previewExpiry ?? access.expiresAt {
-                Text("Подписка до \(SubscriptionPresentation.expiry(expiry))")
+                Text("Доступ до \(SubscriptionPresentation.expiry(expiry))")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if !waiting {
@@ -41,14 +41,14 @@ struct FeatherAccessView: View {
     }
     private var title: String {
         switch currentState {
-        case .expired: return "Подписка закончилась"
+        case .expired: return "Доступ закончился"
         case .disabled: return "Нужно восстановить приложение"
-        default: return "Не удалось проверить подписку"
+        default: return "Не удалось проверить доступ"
         }
     }
     private var message: String {
         switch currentState {
-        case .expired: return "Продлите подписку, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
+        case .expired: return "Продлите доступ, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
         case .disabled: return "Откройте актуальную ссылку в боте или обратитесь в поддержку."
         default: return "Для проверки подключитесь к интернету. Если связь не восстановилась, повторите попытку позже."
         }

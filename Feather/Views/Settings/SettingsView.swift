@@ -9,8 +9,8 @@ struct SettingsView: View {
 	var previewExpiry: Date? = nil
 	private var subscriptionStatus: String {
 		switch previewState ?? access.state {
-		case .active: return "Активна"
-		case .expired: return "Закончилась"
+		case .active: return "Активен"
+		case .expired: return "Закончился"
 		case .disabled: return "Требуется восстановление"
 		case .verificationRequired: return "Нужна проверка через интернет"
 		}
@@ -24,10 +24,10 @@ struct SettingsView: View {
 					if let expiry = previewExpiry ?? access.expiresAt {
 						LabeledContent("Действует до", value: SubscriptionPresentation.expiry(expiry))
 					}
-					Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+					Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
 					Link("Поддержка", destination: URL(string: "https://t.me/dzhabaraduev")!)
 				} footer: {
-					Text("Восстановление входит в оплаченный срок подписки.")
+					Text("Восстановление входит в оплаченный срок доступа.")
 				}
 				SSLUpdateSection()
 				Section {
