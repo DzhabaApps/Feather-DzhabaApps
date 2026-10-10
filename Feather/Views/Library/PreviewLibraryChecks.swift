@@ -16,6 +16,12 @@ enum PreviewLibraryChecks {
             let info = ["CFBundleIdentifier":"preview.ready","CFBundleName":"Готовое приложение","CFBundleShortVersionString":"1.0"]
             try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: directory.appendingPathComponent("Info.plist"))
             Storage.shared.addSigned(uuid: uuid, source: source, appName: "Готовое приложение", appIdentifier: "preview.ready", appVersion: "1.0") { _ in }
+            let importedUUID = UUID().uuidString
+            let importedDirectory = FileManager.default.unsigned(importedUUID).appendingPathComponent("Preview.app")
+            try FileManager.default.createDirectory(at: importedDirectory, withIntermediateDirectories: true)
+            try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: importedDirectory.appendingPathComponent("Info.plist"))
+            Storage.shared.addImported(uuid: importedUUID, source: source, appName: "Готовое приложение", appIdentifier: "preview.ready", appVersion: "1.0") { _ in }
+
         } catch { }
     }
     static func clearAndCheck() async {
