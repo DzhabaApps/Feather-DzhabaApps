@@ -22,11 +22,17 @@ struct FeatherAccessView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if !waiting {
+            if currentState == .expired {
+                Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+                    .buttonStyle(.borderedProminent)
+            }
             Button { Task { await access.refresh(force: true) } } label: {
-                if access.isChecking { ProgressView() } else { Text("Повторить проверку") }
-            }.buttonStyle(.borderedProminent).disabled(access.isChecking)
-            Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
-                .buttonStyle(.bordered)
+                if access.isChecking { ProgressView() } else { Text(currentState == .expired ? "Проверить продление" : "Повторить проверку") }
+            }.buttonStyle(.bordered).disabled(access.isChecking)
+            if currentState != .expired {
+                Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+                    .buttonStyle(.bordered)
+            }
             Link("Связаться с поддержкой", destination: URL(string: "https://t.me/dzhabaraduev")!)
             }
         }
@@ -36,7 +42,7 @@ struct FeatherAccessView: View {
     private var title: String {
         switch currentState {
         case .expired: return "Подписка закончилась"
-        case .disabled: return "Доступ к этой сборке отключён"
+        case .disabled: return "Нужно восстановить приложение"
         default: return "Не удалось проверить подписку"
         }
     }

@@ -22,7 +22,7 @@ struct SourcesView: View {
         }
     }
     var body: some View {
-        NBNavigationView("Магазин приложений", displayMode: .inline) {
+        NBNavigationView("Каталог", displayMode: .inline) {
             List {
                     VStack(alignment: .leading, spacing: 8) {
                         ScrollView(.horizontal, showsIndicators: false) {

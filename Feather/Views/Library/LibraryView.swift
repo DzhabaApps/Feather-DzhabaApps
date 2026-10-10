@@ -81,6 +81,25 @@ struct LibraryView: View {
 	var body: some View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
+                if libraryEntries.isEmpty {
+                    Text(_searchText.isEmpty ? "Скачайте приложение из каталога — оно появится здесь." : "Ничего не найдено")
+                        .foregroundStyle(.secondary)
+                }
+                if !libraryEntries.isEmpty {
+                    NBSection("Приложения") {
+                        ForEach(libraryEntries) { entry in
+                            LibraryCellView(
+                                app: entry.app,
+                                selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+                                selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+                                selectedAppUUIDs: $_selectedAppUUIDs,
+                                deleteApp: { deleteEntry(entry) }
+                            )
+                            .compatMatchedTransitionSource(id: entry.app.uuid ?? "", ns: _namespace)
+                        }
+                    }
+                }
+                if _cacheBytes > 0 {
                 Section {
                     Button { _showCacheConfirmation = true } label: {
                         HStack(spacing: 12) {
@@ -98,23 +117,6 @@ struct LibraryView: View {
                     .buttonStyle(.plain)
                     .disabled(!canClearCache || _cacheBytes == 0)
                 }
-                if libraryEntries.isEmpty {
-                    Text(_searchText.isEmpty ? "Скачайте приложение из магазина — оно появится здесь." : "Ничего не найдено")
-                        .foregroundStyle(.secondary)
-                }
-                if !libraryEntries.isEmpty {
-                    NBSection("Приложения") {
-                        ForEach(libraryEntries) { entry in
-                            LibraryCellView(
-                                app: entry.app,
-                                selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-                                selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-                                selectedAppUUIDs: $_selectedAppUUIDs,
-                                deleteApp: { deleteEntry(entry) }
-                            )
-                            .compatMatchedTransitionSource(id: entry.app.uuid ?? "", ns: _namespace)
-                        }
-                    }
                 }
 			}
             .task { await updateCacheSize() }
@@ -182,7 +184,7 @@ struct LibraryView: View {
                     }
                     catch { _cacheError = "Не удалось удалить все файлы. Попробуйте снова."; _showCacheError = true }
                 }
-            } message: { Text("Файлы в библиотеке Feather будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
+            } message: { Text("Файлы в библиотеке DR Store будут удалены. Для повторной установки их потребуется скачать заново. Приложения на iPhone и подписка сохранятся.") }
             .alert("Хранилище", isPresented: $_showCacheError) { Button("OK", role: .cancel) {} } message: { Text(_cacheError ?? "") }
 			.alert(.localized("Import from URL"), isPresented: $_isDownloadingPresenting) {
 				TextField(.localized("URL"), text: $_alertDownloadString)

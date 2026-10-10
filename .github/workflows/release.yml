@@ -35,7 +35,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Feather v${{ env.VERSION }}
+          name: DR Store v${{ env.VERSION }}
           tag_name: v${{ env.VERSION }}
           files: |
             upload/*

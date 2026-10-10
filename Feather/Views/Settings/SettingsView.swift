@@ -19,7 +19,7 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				NBSection("Подписка") {
+				NBSection("Мой DR Store") {
 					LabeledContent("Статус", value: subscriptionStatus)
 					if let expiry = previewExpiry ?? access.expiresAt {
 						LabeledContent("Действует до", value: SubscriptionPresentation.expiry(expiry))
@@ -60,7 +60,7 @@ struct InstallationPreferencesView: View {
         NBList("Установка") {
             Section {
                 Toggle("Удалять лишние файлы автоматически", isOn: $manager.options.post_deleteAppAfterSigned)
-            } footer: { Text("После подготовки лишние файлы удаляются. Для приложений с копиями сохраняется общий исходник, чтобы создавать другие копии без повторной загрузки. Все скачанные файлы можно удалить кнопкой «Освободить место» в библиотеке; список копий сохранится.") }
+            } footer: { Text("Удаляем временные файлы после подготовки. Исходники для создания копий сохраняются. Управлять скачанными файлами можно в разделе «Хранилище».") }
         }
         .onChange(of: manager.options) { _ in manager.saveOptions() }
     }
@@ -94,7 +94,7 @@ struct StorageSettingsView: View {
             switch self {
             case .apps: return "Копии приложений в библиотеке будут удалены. Для повторной установки их нужно скачать заново. Приложения на iPhone, иконки магазина и подписка сохранятся."
             case .work: return "Будут удалены остатки подготовки и установки. Скачанные приложения, иконки магазина и подписка сохранятся."
-            case .archives: return "Будут удалены архивы, сохранённые при экспорте из Feather. Приложения на iPhone и файлы библиотеки сохранятся."
+            case .archives: return "Будут удалены архивы, сохранённые при экспорте из DR Store. Приложения на iPhone и файлы библиотеки сохранятся."
             }
         }
     }
@@ -103,7 +103,7 @@ struct StorageSettingsView: View {
         NBList(.localized("Storage")) {
             Section {
                 LabeledContent("Локальные файлы", value: formatted(files.total + iconBytes))
-            } footer: { Text("Это файлы внутри Feather. Установленные на iPhone приложения занимают место отдельно.") }
+            } footer: { Text("Это файлы внутри DR Store. Установленные на iPhone приложения занимают место отдельно.") }
             Section {
                 LabeledContent("Скачанные приложения", value: formatted(files.apps))
                 LabeledContent("Сохранённые архивы", value: formatted(files.archives))

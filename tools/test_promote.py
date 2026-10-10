@@ -8,7 +8,7 @@ from promote_ipa import promote
 with tempfile.TemporaryDirectory() as folder:
     source = pathlib.Path(folder)/'preview.ipa'
     target = pathlib.Path(folder)/'production.ipa'
-    info = {'CFBundleIdentifier':'ru.dzhabaapps.fizer.preview', 'CFBundleDisplayName':'Feather Test',
+    info = {'CFBundleIdentifier':'ru.dzhabaapps.fizer.preview', 'CFBundleDisplayName':'DR Store Test',
             'CFBundleShortVersionString':'fixture', 'CFBundleVersion':'fixture',
             'BGTaskSchedulerPermittedIdentifiers':['ru.dzhabaapps.fizer.preview.userTask.*'],
             'CFBundleURLTypes':[{'CFBundleURLSchemes':['fizer-preview']}]}

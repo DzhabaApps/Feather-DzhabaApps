@@ -18,12 +18,12 @@ def promote(source: pathlib.Path, destination: pathlib.Path, *, version: str = '
         assert original.testzip() is None
         info = plistlib.loads(original.read(metadata_path))
         assert info['CFBundleIdentifier'] == 'ru.dzhabaapps.fizer.preview'
-        assert info['CFBundleDisplayName'] == 'Feather Test'
+        assert info['CFBundleDisplayName'] == 'DR Store Test'
         assert info['CFBundleShortVersionString'] == version
         assert info['CFBundleVersion'] == commit
         assert not any('signing-assets/' in n for n in original.namelist())
         info['CFBundleIdentifier'] = 'thewonderofyou.Feather'
-        info['CFBundleDisplayName'] = 'Feather'
+        info['CFBundleDisplayName'] = 'DR Store'
         info['BGTaskSchedulerPermittedIdentifiers'] = [
             identifier.replace('ru.dzhabaapps.fizer.preview.', 'thewonderofyou.Feather.', 1)
             for identifier in info.get('BGTaskSchedulerPermittedIdentifiers', [])
