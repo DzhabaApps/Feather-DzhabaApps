@@ -30,27 +30,40 @@ struct LibraryView: View {
     @ObservedObject private var installer = RepositoryInstallCoordinator.shared
     private var canClearCache: Bool { !downloadManager.isRestoring && downloadManager.downloads.isEmpty && !installer.isBusy }
     @State private var _searchText = ""
-	@State private var _selectedScope: Scope = .all
 	
 	
 	@Namespace private var _namespace
 	
-	// horror
-	private func filteredAndSortedApps<T>(from apps: FetchedResults<T>) -> [T] where T: NSManagedObject {
-		apps.filter {
-			_searchText.isEmpty ||
-				(($0.value(forKey: "name") as? String)?.localizedCaseInsensitiveContains(_searchText) ?? false)
-		}
-	}
-	
-	private var _filteredSignedApps: [Signed] {
-		filteredAndSortedApps(from: _signedApps)
-	}
-	
-	private var _filteredImportedApps: [Imported] {
-		filteredAndSortedApps(from: _importedApps)
-	}
-	
+    private struct LibraryEntry: Identifiable {
+        let id: LibraryAppIdentity
+        let apps: [AppInfoPresentable]
+        var app: AppInfoPresentable { apps[0] }
+    }
+
+    private var libraryEntries: [LibraryEntry] {
+        let apps: [AppInfoPresentable] = _signedApps.map { $0 as AppInfoPresentable } + _importedApps.map { $0 as AppInfoPresentable }
+        let groups = Dictionary(grouping: apps) { app in
+            LibraryAppIdentity(identifier: app.identifier, version: app.version,
+                               source: app.source, uuid: app.uuid ?? (app as! NSManagedObject).objectID.uriRepresentation().absoluteString)
+        }
+        return groups.map { identity, members in
+            LibraryEntry(id: identity, apps: members.sorted {
+                if $0.isSigned != $1.isSigned { return $0.isSigned }
+                return ($0.date ?? .distantPast) > ($1.date ?? .distantPast)
+            })
+        }.filter { entry in
+            _searchText.isEmpty || entry.apps.contains { ($0.name ?? "").localizedCaseInsensitiveContains(_searchText) }
+        }.sorted {
+            let left = $0.apps.compactMap(\.date).max() ?? .distantPast
+            let right = $1.apps.compactMap(\.date).max() ?? .distantPast
+            return left == right ? ($0.app.uuid ?? "") < ($1.app.uuid ?? "") : left > right
+        }
+    }
+
+    private func deleteEntry(_ entry: LibraryEntry) {
+        for app in entry.apps { Storage.shared.deleteApp(for: app) }
+    }
+
 	// MARK: Fetch
 	@FetchRequest(
 		entity: Signed.entity(),
@@ -85,56 +98,28 @@ struct LibraryView: View {
                     .buttonStyle(.plain)
                     .disabled(!canClearCache || _cacheBytes == 0)
                 }
-                if _filteredSignedApps.isEmpty && _filteredImportedApps.isEmpty {
+                if libraryEntries.isEmpty {
                     Text(_searchText.isEmpty ? "Скачайте приложение из магазина — оно появится здесь." : "Ничего не найдено")
                         .foregroundStyle(.secondary)
                 }
-				if
-					!_filteredSignedApps.isEmpty,
-					_selectedScope == .all || _selectedScope == .signed
-				{
-					NBSection(
-						"Готовые к установке"
-					) {
-						ForEach(_filteredSignedApps, id: \.uuid) { app in
-							LibraryCellView(
-								app: app,
-								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-								selectedAppUUIDs: $_selectedAppUUIDs
-							)
-							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-						}
-					}
-				}
-				
-				if
-					!_filteredImportedApps.isEmpty,
-					_selectedScope == .all || _selectedScope == .imported
-				{
-					NBSection(
-						"Скачанные"
-					) {
-						ForEach(_filteredImportedApps, id: \.uuid) { app in
-							LibraryCellView(
-								app: app,
-								selectedInfoAppPresenting: $_selectedInfoAppPresenting,
-								selectedInstallAppPresenting: $_selectedInstallAppPresenting,
-								selectedAppUUIDs: $_selectedAppUUIDs
-							)
-							.compatMatchedTransitionSource(id: app.uuid ?? "", ns: _namespace)
-						}
-					}
-				}
+                if !libraryEntries.isEmpty {
+                    NBSection("Приложения") {
+                        ForEach(libraryEntries) { entry in
+                            LibraryCellView(
+                                app: entry.app,
+                                selectedInfoAppPresenting: $_selectedInfoAppPresenting,
+                                selectedInstallAppPresenting: $_selectedInstallAppPresenting,
+                                selectedAppUUIDs: $_selectedAppUUIDs,
+                                deleteApp: { deleteEntry(entry) }
+                            )
+                            .compatMatchedTransitionSource(id: entry.app.uuid ?? "", ns: _namespace)
+                        }
+                    }
+                }
 			}
             .task { await updateCacheSize() }
             .onChange(of: _signedApps.count + _importedApps.count) { _ in Task { await updateCacheSize() } }
 			.searchable(text: $_searchText, placement: .platform())
-			.compatSearchScopes($_selectedScope) {
-				ForEach(Scope.allCases, id: \.displayName) { scope in
-					Text(scope.displayName).tag(scope)
-				}
-			}
 			.scrollDismissesKeyboard(.interactively)
 
 			.toolbar {
@@ -247,49 +232,11 @@ extension LibraryView {
 
 // MARK: - Extension: Bulk Delete
 extension LibraryView {
-	private func _bulkDeleteSelectedApps() {
-		let selectedApps = _getAllApps().filter { app in
-			guard let uuid = app.uuid else { return false }
-			return _selectedAppUUIDs.contains(uuid)
-		}
-		
-		for app in selectedApps {
-			Storage.shared.deleteApp(for: app)
-		}
-		
-		_selectedAppUUIDs.removeAll()
-		
-		// _editMode = .inactive
-	}
-	
-	private func _getAllApps() -> [AppInfoPresentable] {
-		var allApps: [AppInfoPresentable] = []
-		
-		if _selectedScope == .all || _selectedScope == .signed {
-			allApps.append(contentsOf: _filteredSignedApps)
-		}
-		
-		if _selectedScope == .all || _selectedScope == .imported {
-			allApps.append(contentsOf: _filteredImportedApps)
-		}
-		
-		return allApps
-	}
-}
-
-// MARK: - Extension: View (Sort)
-extension LibraryView {
-	enum Scope: CaseIterable {
-		case all
-		case signed
-		case imported
-		
-		var displayName: String {
-			switch self {
-			case .all: return .localized("All")
-			case .signed: return "Готовые к установке"
-			case .imported: return "Скачанные"
-			}
-		}
-	}
+    private func _bulkDeleteSelectedApps() {
+        let selected = libraryEntries.filter { entry in
+            entry.app.uuid.map { _selectedAppUUIDs.contains($0) } ?? false
+        }
+        for entry in selected { deleteEntry(entry) }
+        _selectedAppUUIDs.removeAll()
+    }
 }

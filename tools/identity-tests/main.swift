@@ -18,3 +18,12 @@ check(DownloadPresentation.title(displayName: "YouTube Plus", url: ipaURL) == "Y
 check(DownloadPresentation.title(displayName: " WhatsApp 🟢 ", url: ipaURL) == "WhatsApp 🟢", "Preserve names and Unicode from the catalog")
 check(DownloadPresentation.title(displayName: nil, url: URL(string: "https://example.com/WhatsApp.ipa")!) == "WhatsApp", "Manual file fallback excludes the IPA extension")
 print("Repository identity and download names: 8 checks passed")
+
+let libraryOriginal = LibraryAppIdentity(identifier: "test.app", version: "1", source: first, uuid: "download")
+let libraryPrepared = LibraryAppIdentity(identifier: "test.app", version: "1", source: first, uuid: "prepared")
+check(libraryOriginal == libraryPrepared, "A prepared file must share its downloaded library item")
+check(libraryOriginal != LibraryAppIdentity(identifier: "test.app.copy1", version: "1", source: first, uuid: "copy"), "Copies must remain visible")
+check(libraryOriginal != LibraryAppIdentity(identifier: "test.app", version: "2", source: first, uuid: "update"), "Different versions must remain visible")
+check(libraryOriginal != LibraryAppIdentity(identifier: "test.app", version: "1", source: second, uuid: "other"), "Different IPA sources must remain visible")
+check(LibraryAppIdentity(identifier: nil, version: nil, source: nil, uuid: "a") != LibraryAppIdentity(identifier: nil, version: nil, source: nil, uuid: "b"), "Unknown identifiers must not merge")
+print("Unified library identity: originals and prepared files merged; copies, versions and sources preserved")

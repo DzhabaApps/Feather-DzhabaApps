@@ -14,3 +14,17 @@ enum RepositoryFileIdentity {
 		return components.url!
 	}
 }
+
+// The unsigned source and its prepared file are one library item. A different
+// version, source archive or copy bundle identifier remains a separate item.
+struct LibraryAppIdentity: Hashable {
+    let identifier: String
+    let version: String
+    let source: URL?
+
+    init(identifier: String?, version: String?, source: URL?, uuid: String) {
+        self.identifier = identifier?.isEmpty == false ? identifier! : "local:" + uuid
+        self.version = version ?? ""
+        self.source = source
+    }
+}

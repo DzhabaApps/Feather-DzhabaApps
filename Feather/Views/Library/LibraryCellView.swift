@@ -19,6 +19,7 @@ struct LibraryCellView: View {
 	@Binding var selectedInfoAppPresenting: AnyApp?
 	@Binding var selectedInstallAppPresenting: AnyApp?
 	@Binding var selectedAppUUIDs: Set<String>
+    var deleteApp: () -> Void
 	
 	// MARK: Selections
 	private var _isSelected: Bool {
@@ -108,7 +109,7 @@ extension LibraryCellView {
 	@ViewBuilder
 	private func _actions(for app: AppInfoPresentable) -> some View {
 		Button(.localized("Delete"), systemImage: "trash", role: .destructive) {
-			Storage.shared.deleteApp(for: app)
+			deleteApp()
 		}
 	}
 	
