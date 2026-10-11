@@ -8,6 +8,13 @@ final class InstructionPlayback: ObservableObject {
     private static weak var active: InstructionPlayback?
     @Published private(set) var player: AVPlayer?
     @Published private(set) var error: String?
+    @Published private(set) var time = 0.0
+    @Published private(set) var duration = 0.0
+    @Published private(set) var playing = false
+    @Published private(set) var buffering = false
+    @Published var fullScreen = false
+    var fullScreenVisible = false
+    private var timeObserver: Any?
     private var observation: NSKeyValueObservation?
     private var resourceLoader: InstructionResourceLoader?
     var transportDiagnostics: [String: Int] { resourceLoader?.diagnostics ?? [:] }
@@ -23,6 +30,16 @@ final class InstructionPlayback: ObservableObject {
         item.preferredForwardBufferDuration = 5
         let player = AVPlayer(playerItem: item)
         self.player = player
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.player === player else { return }
+                self.time = max(0, player.currentTime().seconds.isFinite ? player.currentTime().seconds : 0)
+                let length = player.currentItem?.duration.seconds ?? 0
+                self.duration = length.isFinite ? max(0, length) : 0
+                self.playing = player.rate > 0
+                self.buffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+            }
+        }
         Self.active = self
         observation = item.observe(\.status, options: [.new, .initial]) { [weak self] item, _ in
             if item.status == .failed {
@@ -36,40 +53,96 @@ final class InstructionPlayback: ObservableObject {
     }
 
     func pause() { player?.pause() }
+    func toggle() { if player?.rate == 0 { player?.play() } else { pause() } }
+    func seek(_ seconds: Double, resume: Bool) {
+        player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: CMTime(seconds: 0.15, preferredTimescale: 600), toleranceAfter: CMTime(seconds: 0.15, preferredTimescale: 600)) { [weak self] finished in
+            Task { @MainActor [weak self] in if finished && resume { self?.player?.play() } }
+        }
+    }
+    func leaveInline() { if !fullScreen { stop() } }
     func stop() {
         if Self.active === self { Self.active = nil }
         observation = nil
+        if let timeObserver { player?.removeTimeObserver(timeObserver) }
+        timeObserver = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
         resourceLoader?.invalidate()
         resourceLoader = nil
+        time = 0; duration = 0; playing = false; buffering = false
     }
 }
 
-private struct InlineInstructionPlayer: UIViewControllerRepresentable {
+private final class InstructionLayerView: UIView {
+    override class var layerClass: AnyClass { AVPlayerLayer.self }
+    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+}
+
+private struct InstructionPlayerLayer: UIViewRepresentable {
     let player: AVPlayer
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        let controller = AVPlayerViewController()
-        controller.player = player
-        controller.showsPlaybackControls = true
-        controller.allowsPictureInPicturePlayback = false
-        controller.videoGravity = .resizeAspect
-        return controller
+    func makeUIView(context: Context) -> InstructionLayerView {
+        let view = InstructionLayerView()
+        view.playerLayer.videoGravity = .resizeAspect
+        view.playerLayer.player = player
+        return view
     }
-    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
-        if controller.player !== player { controller.player = player }
+    func updateUIView(_ view: InstructionLayerView, context: Context) {
+        if view.playerLayer.player !== player { view.playerLayer.player = player }
     }
-    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: ()) {
-        controller.player?.pause()
-        controller.player = nil
+    static func dismantleUIView(_ view: InstructionLayerView, coordinator: ()) {
+        // Detach only the rendering surface. The shared playback model owns the item.
+        view.playerLayer.player = nil
     }
 }
 
+private struct InstructionPlayerSurface: View {
+    @ObservedObject var playback: InstructionPlayback
+    let expanded: Bool
+    @State private var scrub: Double?
+    @State private var resumeAfterScrub = false
+    private func stamp(_ value: Double) -> String { let value = Int(max(0, value)); return String(format: "%d:%02d", value / 60, value % 60) }
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let player = playback.player { InstructionPlayerLayer(player: player).ignoresSafeArea(edges: expanded ? .all : []) }
+            if playback.buffering { ProgressView().tint(.white).accessibilityLabel("Загрузка видео") }
+            VStack {
+                HStack {
+                    Spacer()
+                    Button { playback.fullScreen = !expanded } label: {
+                        Image(systemName: expanded ? "xmark" : "arrow.up.left.and.arrow.down.right")
+                            .font(.body.weight(.semibold)).padding(13).background(.black.opacity(0.55), in: Circle())
+                    }.accessibilityLabel(expanded ? "Закрыть полный экран" : "На весь экран")
+                        .accessibilityIdentifier(expanded ? "instruction-close-fullscreen" : "instruction-fullscreen")
+                }
+                Spacer()
+                VStack(spacing: 6) {
+                    Slider(value: Binding(get: { scrub ?? min(playback.time, max(1, playback.duration)) }, set: { scrub = $0 }), in: 0...max(1, playback.duration)) { editing in
+                        if editing { resumeAfterScrub = playback.player?.rate != 0; playback.pause() }
+                        else if let target = scrub { playback.seek(target, resume: resumeAfterScrub); scrub = nil }
+                    }.tint(.white).disabled(playback.duration <= 0).accessibilityLabel("Позиция видео")
+                    HStack {
+                        Button { playback.toggle() } label: { Image(systemName: playback.playing ? "pause.fill" : "play.fill").frame(width: 32, height: 32) }
+                            .accessibilityLabel(playback.playing ? "Пауза" : "Воспроизвести")
+                        Text("\(stamp(scrub ?? playback.time)) / \(stamp(playback.duration))").font(.caption.monospacedDigit())
+                        Spacer()
+                    }
+                }.padding(10).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
+            }.padding(expanded ? 20 : 10).foregroundStyle(.white)
+        }
+    }
+}
+
+@MainActor
 struct InstructionVideoCard: View {
     let instruction: StoreInstruction
-    @StateObject private var playback = InstructionPlayback()
+    @StateObject private var playback: InstructionPlayback
     @Environment(\.scenePhase) private var scenePhase
+    init(instruction: StoreInstruction, playback: InstructionPlayback? = nil) {
+        self.instruction = instruction
+        _playback = StateObject(wrappedValue: playback ?? InstructionPlayback())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -80,7 +153,7 @@ struct InstructionVideoCard: View {
             ZStack {
                 Color.black
                 if let player = playback.player, playback.error == nil {
-                    InlineInstructionPlayer(player: player)
+                    if !playback.fullScreen { InstructionPlayerSurface(playback: playback, expanded: false) }
                 } else {
                     Button {
                         playback.start(instruction.video_url)
@@ -111,7 +184,12 @@ struct InstructionVideoCard: View {
                 }
             }
         }
-        .onDisappear { playback.stop() }
+        .fullScreenCover(isPresented: $playback.fullScreen) {
+            InstructionPlayerSurface(playback: playback, expanded: true)
+                .onAppear { playback.fullScreenVisible = true }
+                .onDisappear { playback.fullScreenVisible = false }
+        }
+        .onDisappear { playback.leaveInline() }
         .onChange(of: scenePhase) { phase in if phase != .active { playback.pause() } }
     }
 }

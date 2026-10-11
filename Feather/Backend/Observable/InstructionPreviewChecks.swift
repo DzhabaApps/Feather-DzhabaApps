@@ -1,15 +1,16 @@
 import Foundation
 import AVFoundation
 import CoreVideo
+import SwiftUI
 
 @MainActor
 enum InstructionPreviewChecks {
-    static func run() async {
+    static func run(playback: InstructionPlayback) async {
         guard Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" else { return }
         var checks: [String: Bool] = [:]
         var detail = ""
         var transport: [String: Int] = [:]
-        let playback = InstructionPlayback()
+        var timings: [String: Double] = [:]
         do {
             let encoded = try JSONEncoder().encode(InstructionIndex(schema_version: 1, instructions: [.sample]))
             let decoded = try InstructionIndex.decode(encoded)
@@ -19,11 +20,13 @@ enum InstructionPreviewChecks {
             checks["http_rejected"] = !StoreInstruction.isTrusted(URL(string: "http://json.dzhabaapps.ru/instruction-media/test.mp4")!)
             checks["foreign_host_rejected"] = !StoreInstruction.isTrusted(URL(string: "https://example.com/test.mp4")!)
             checks["no_video_before_play"] = playback.player == nil
+            let started = Date()
             playback.start(StoreInstruction.sample.video_url)
             guard let player = playback.player, let item = player.currentItem else { throw URLError(.cannotOpenFile) }
             let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
             item.add(output)
             let firstFrame = await waitForFrame(player, item, output, after: 0.1)
+            timings["firstFrameSeconds"] = Date().timeIntervalSince(started)
             checks["github_native_first_frame"] = firstFrame
             checks["github_native_ready"] = item.status == .readyToPlay
             transport = playback.transportDiagnostics
@@ -37,14 +40,27 @@ enum InstructionPreviewChecks {
             let seekOutput = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
             seekItem.add(seekOutput)
             _ = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 0.1)
+            let seekStarted = Date()
             let seekDone = await withCheckedContinuation { continuation in
                 seekPlayer.seek(to: CMTime(seconds: 30, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) {
                     continuation.resume(returning: $0)
                 }
             }
             let seekFrame = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30)
+            timings["seekFrameSeconds"] = Date().timeIntervalSince(seekStarted)
             checks["github_native_seek_frame"] = seekDone && seekFrame
             if !seekFrame { detail += "; seek error=\(seekItem.error.map { String(describing: $0) } ?? "none")" }
+            playback.fullScreen = true
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            checks["fullscreen_presented"] = playback.fullScreenVisible
+            checks["fullscreen_keeps_same_item"] = playback.player === seekPlayer && seekPlayer.currentItem === seekItem
+            checks["fullscreen_has_video_frame"] = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30.5)
+            let signal = URL.documentsDirectory.appendingPathComponent("instruction-fullscreen-ready.json")
+            try? Data("{\"ready\":true}".utf8).write(to: signal, options: .atomic)
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            playback.fullScreen = false
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            checks["fullscreen_returns_to_inline"] = !playback.fullScreenVisible && playback.player === seekPlayer && seekPlayer.currentItem === seekItem
             playback.pause()
             checks["pause_stops_playback"] = seekPlayer.rate == 0
             playback.stop()
@@ -54,7 +70,8 @@ enum InstructionPreviewChecks {
         } catch { detail = String(describing: error) }
         playback.stop()
         let result: [String: Any] = ["checks": checks, "error": detail,
-            "passed": detail.isEmpty && checks.count == 12 && checks.values.allSatisfy { $0 },
+            "passed": detail.isEmpty && checks.count == 16 && checks.values.allSatisfy { $0 },
+            "timings": timings,
             "transport": transport,
             "commit": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""]
         let url = URL.documentsDirectory.appendingPathComponent("instruction-validation.json")
@@ -73,5 +90,21 @@ enum InstructionPreviewChecks {
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
         return false
+    }
+}
+
+@MainActor
+struct InstructionPlaybackPreviewView: View {
+    @StateObject private var playback = InstructionPlayback()
+    @State private var started = false
+    var body: some View {
+        NavigationStack {
+            ScrollView { InstructionVideoCard(instruction: .sample, playback: playback).padding() }
+                .navigationTitle("Проверка видео").navigationBarTitleDisplayMode(.inline)
+        }.onAppear {
+            guard !started else { return }
+            started = true
+            Task { await InstructionPreviewChecks.run(playback: playback) }
+        }
     }
 }

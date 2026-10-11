@@ -10,6 +10,8 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
         let offset: Int64
         let length: Int64?
         var remaining: Int64 = 0
+        var received: Int64 = 0
+        var retried = false
         init(_ loading: AVAssetResourceLoadingRequest, offset: Int64, length: Int64?) {
             self.loading = loading; self.offset = offset; self.length = length
         }
@@ -22,6 +24,17 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
     private var partialResponses = 0
     private var redirects = 0
     private var lastStatus = 0
+    private final class Segment {
+        let offset: Int64
+        var data: Data
+        init(offset: Int64, data: Data) { self.offset = offset; self.data = data }
+    }
+    private var cache: [Segment] = []
+    private var cacheBytes = 0
+    private var cacheHits = 0
+    private var totalLength: Int64?
+    private var resolvedURL: URL?
+    private var resolvedAt = Date.distantPast
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.urlCache = nil
@@ -46,7 +59,7 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
     }
 
     var diagnostics: [String: Int] {
-        queue.sync { ["requests": requests, "partialResponses": partialResponses, "redirects": redirects, "lastStatus": lastStatus] }
+        queue.sync { ["requests": requests, "partialResponses": partialResponses, "redirects": redirects, "lastStatus": lastStatus, "cacheBytes": cacheBytes, "cacheHits": cacheHits] }
     }
 
     func invalidate() {
@@ -54,6 +67,7 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
             self.invalidated = true
             for job in self.jobs.values { job.loading.finishLoading(with: URLError(.cancelled)) }
             self.jobs.removeAll()
+            self.cache.removeAll(); self.cacheBytes = 0
             self.session.invalidateAndCancel()
         }
     }
@@ -62,21 +76,66 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
         guard loading.request.url?.scheme == "dr-instruction" else { return false }
         guard !invalidated else { loading.finishLoading(with: URLError(.cancelled)); return true }
         let data = loading.dataRequest
-        let offset = data.map { max($0.requestedOffset, $0.currentOffset) } ?? 0
-        let length: Int64? = data.map { $0.requestsAllDataToEndOfResource ? nil : Int64($0.requestedLength) } ?? 2
+        var offset = data.map { max($0.requestedOffset, $0.currentOffset) } ?? 0
+        var length: Int64? = data.map { $0.requestsAllDataToEndOfResource ? nil : max(0, Int64($0.requestedLength) - (offset - $0.requestedOffset)) } ?? 2
         guard offset >= 0, length == nil || length! >= 0 else {
             loading.finishLoading(with: URLError(.badServerResponse)); return true
         }
-        var request = URLRequest(url: original, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        if let totalLength {
+            fillInformation(loading, total: totalLength)
+            if data == nil { cacheHits += 1; loading.finishLoading(); return true }
+            if length == nil { length = max(0, totalLength - offset) }
+            while let segment = cache.last(where: { $0.offset <= offset && $0.offset + Int64($0.data.count) > offset }) {
+                let start = Int(offset - segment.offset)
+                let count = min(segment.data.count - start, Int(length ?? 0))
+                guard count > 0 else { break }
+                data?.respond(with: segment.data.subdata(in: start..<(start + count)))
+                cacheHits += 1; offset += Int64(count); length = (length ?? 0) - Int64(count)
+                if length == 0 { loading.finishLoading(); return true }
+            }
+        }
+        if length == 0 { loading.finishLoading(); return true }
+        let job = Job(loading, offset: offset, length: length)
+        start(job)
+        return true
+    }
+
+    private func start(_ job: Job) {
+        let url = Date().timeIntervalSince(resolvedAt) < 600 ? (resolvedURL ?? original) : original
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        let offset = job.offset, length = job.length
         let addition = offset.addingReportingOverflow(max(0, (length ?? 1) - 1))
         let end = length != nil && !addition.overflow ? String(addition.partialValue) : ""
         request.setValue("bytes=\(offset)-\(end)", forHTTPHeaderField: "Range")
         request.setValue("video/mp4,application/octet-stream", forHTTPHeaderField: "Accept")
         let task = session.dataTask(with: request)
-        jobs[task.taskIdentifier] = Job(loading, offset: offset, length: length)
+        jobs[task.taskIdentifier] = job
         requests += 1
         task.resume()
-        return true
+    }
+
+    private func fillInformation(_ loading: AVAssetResourceLoadingRequest, total: Int64) {
+        if let info = loading.contentInformationRequest {
+            info.contentType = UTType.mpeg4Movie.identifier
+            info.contentLength = total
+            info.isByteRangeAccessSupported = true
+        }
+    }
+
+    private func remember(_ data: Data, offset: Int64) {
+        // Bounded RAM cache, discarded with the player; never adds files to IPA or disk.
+        let blockLimit = 1024 * 1024, limit = 16 * 1024 * 1024
+        var position = 0
+        while position < data.count {
+            let current = offset + Int64(position)
+            let last = cache.last
+            let append = last != nil && last!.offset + Int64(last!.data.count) == current && last!.data.count < blockLimit
+            let count = min(data.count - position, append ? blockLimit - last!.data.count : blockLimit)
+            let bytes = data.subdata(in: position..<(position + count))
+            if append { last!.data.append(bytes) } else { cache.append(Segment(offset: current, data: bytes)) }
+            cacheBytes += count; position += count
+            while cacheBytes > limit, !cache.isEmpty { cacheBytes -= cache.removeFirst().data.count }
+        }
     }
 
     func resourceLoader(_ resourceLoader: AVAssetResourceLoader, didCancel loading: AVAssetResourceLoadingRequest) {
@@ -107,6 +166,11 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
             completionHandler(.cancel); return
         }
         lastStatus = http.statusCode
+        if [401, 403].contains(http.statusCode), !job.retried, response.url != original {
+            jobs.removeValue(forKey: dataTask.taskIdentifier)
+            resolvedURL = nil; job.retried = true
+            completionHandler(.cancel); start(job); return
+        }
         let header = http.value(forHTTPHeaderField: "Content-Range") ?? ""
         let parts = header.replacingOccurrences(of: "bytes ", with: "").split(separator: "/")
         let bounds = parts.first?.split(separator: "-") ?? []
@@ -119,11 +183,9 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
             completionHandler(.cancel); return
         }
         partialResponses += 1
-        if let info = job.loading.contentInformationRequest {
-            info.contentType = UTType.mpeg4Movie.identifier
-            info.contentLength = total
-            info.isByteRangeAccessSupported = true
-        }
+        totalLength = total
+        resolvedURL = response.url; resolvedAt = Date()
+        fillInformation(job.loading, total: total)
         job.remaining = min(job.length ?? (total - start), total - start)
         if job.loading.dataRequest == nil || job.remaining == 0 {
             jobs.removeValue(forKey: dataTask.taskIdentifier)
@@ -136,6 +198,8 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
         guard let job = jobs[dataTask.taskIdentifier] else { return }
         let count = min(data.count, Int(job.remaining))
         if count > 0 {
+            remember(Data(data.prefix(count)), offset: job.offset + job.received)
+            job.received += Int64(count)
             job.loading.dataRequest?.respond(with: data.prefix(count))
             job.remaining -= Int64(count)
         }
