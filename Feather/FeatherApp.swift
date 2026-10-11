@@ -84,6 +84,7 @@ struct FeatherApp: App {
 			}
 			}
 			.tint(Color(hex: accentHex))
+			.accentColor(Color(hex: accentHex))
 		}
 	}
 
