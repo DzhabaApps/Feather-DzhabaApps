@@ -21,6 +21,7 @@ struct FeatherApp: App {
 	@StateObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
 	@StateObject private var access = FeatherAccessManager.shared
 	@Environment(\.scenePhase) private var scenePhase
+	@AppStorage("Feather.userTintColor") private var accentHex = "#7866E8"
 	let storage = Storage.shared
 
 	init() {
@@ -29,6 +30,7 @@ struct FeatherApp: App {
 	
 	var body: some Scene {
 		WindowGroup {
+			Group {
 			if let screen = ProcessInfo.processInfo.environment["FIZER_PREVIEW_SCREEN"], Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" {
 				_previewScreen(screen)
 					.environment(\.managedObjectContext, storage.context)
@@ -80,6 +82,8 @@ struct FeatherApp: App {
 				UIApplication.topViewController()?.view.window?.tintColor = UIColor(Color(hex: UserDefaults.standard.string(forKey: "Feather.userTintColor") ?? "#7866E8"))
 			}
 			}
+			}
+			.tint(Color(hex: accentHex))
 		}
 	}
 
