@@ -84,7 +84,7 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
         if let totalLength {
             fillInformation(loading, total: totalLength)
             if data == nil { cacheHits += 1; loading.finishLoading(); return true }
-            if length == nil { length = max(0, totalLength - offset) }
+            length = min(length ?? totalLength, max(0, totalLength - offset))
             while let segment = cache.last(where: { $0.offset <= offset && $0.offset + Int64($0.data.count) > offset }) {
                 let start = Int(offset - segment.offset)
                 let count = min(segment.data.count - start, Int(length ?? 0))
@@ -94,7 +94,10 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
                 if length == 0 { loading.finishLoading(); return true }
             }
         }
-        if length == 0 { loading.finishLoading(); return true }
+        if length == 0 {
+            if totalLength == nil && loading.contentInformationRequest != nil { length = 2 }
+            else { loading.finishLoading(); return true }
+        }
         let job = Job(loading, offset: offset, length: length)
         start(job)
         return true
@@ -187,7 +190,7 @@ final class InstructionResourceLoader: NSObject, AVAssetResourceLoaderDelegate, 
         resolvedURL = response.url; resolvedAt = Date()
         fillInformation(job.loading, total: total)
         job.remaining = min(job.length ?? (total - start), total - start)
-        if job.loading.dataRequest == nil || job.remaining == 0 {
+        if job.loading.dataRequest == nil || job.loading.dataRequest?.requestedLength == 0 || job.remaining == 0 {
             jobs.removeValue(forKey: dataTask.taskIdentifier)
             job.loading.finishLoading()
             completionHandler(.cancel)

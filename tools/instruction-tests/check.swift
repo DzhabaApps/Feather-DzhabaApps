@@ -13,11 +13,13 @@ struct InstructionTransportCheck {
             let tracks = try await asset.loadTracks(withMediaType: .video)
             let replay = loader.makeAsset()
             let replayDuration = try await replay.load(.duration)
+            let generator = AVAssetImageGenerator(asset: replay)
+            let tail = try await generator.image(at: CMTime(seconds: 44, preferredTimescale: 600))
             let metrics = loader.diagnostics
             guard abs(duration.seconds - 45) < 1, playable, !tracks.isEmpty,
                   (metrics["partialResponses"] ?? 0) > 0,
                   (metrics["cacheHits"] ?? 0) > 0, abs(replayDuration.seconds - 45) < 1,
-                  (metrics["cacheBytes"] ?? 0) <= 16 * 1024 * 1024 else {
+                  (metrics["cacheBytes"] ?? 0) <= 16 * 1024 * 1024, tail.image.width > 0 else {
                 throw URLError(.cannotDecodeContentData)
             }
             print("Native MP4 range transport passed: \(metrics)")
