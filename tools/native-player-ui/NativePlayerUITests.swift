@@ -2,9 +2,19 @@ import XCTest
 
 final class NativePlayerUITests: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "ru.dzhabaapps.fizer.preview")
+    typealias Match = (XCUIElementSnapshot) -> Bool
+    func find(_ snapshot: XCUIElementSnapshot, _ match: Match) -> XCUIElementSnapshot? {
+        if match(snapshot) { return snapshot }
+        for child in snapshot.children { if let result = find(child, match) { return result } }
+        return nil
+    }
+    func current(_ match: Match) -> XCUIElementSnapshot? {
+        guard let snapshot = try? app.snapshot() else { return nil }
+        return find(snapshot, match)
+    }
     func state() -> [String: Any] {
-        let element = app.descendants(matching: .any).matching(identifier: "instruction-ui-state").firstMatch
-        guard element.exists, let text = element.value as? String, let data = text.data(using: .utf8),
+        guard let element = current({ $0.identifier == "instruction-ui-state" }),
+              let text = element.value as? String, let data = text.data(using: .utf8),
               let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [:] }
         return result
     }
@@ -13,9 +23,10 @@ final class NativePlayerUITests: XCTestCase {
         while Date() < deadline { if condition() { return }; Thread.sleep(forTimeInterval: 0.2) }
         XCTFail(message + "\n" + app.debugDescription)
     }
-    func button(_ words: [String]) -> XCUIElement {
-        let clauses = words.map { "label CONTAINS[c] '\($0)' OR identifier CONTAINS[c] '\($0)'" }
-        return app.buttons.matching(NSPredicate(format: clauses.joined(separator: " OR "))).firstMatch
+    func button(_ words: [String]) -> Match {
+        { element in element.elementType == .button && words.contains {
+            element.label.localizedCaseInsensitiveContains($0) || element.identifier.localizedCaseInsensitiveContains($0)
+        } }
     }
     func snapshot(_ name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
@@ -25,20 +36,36 @@ final class NativePlayerUITests: XCTestCase {
         // Tap video away from the centre transport controls and top corner buttons.
         app.coordinate(withNormalizedOffset: CGVector(dx: 0.22, dy: 0.3)).tap()
     }
-    func freshControl(_ element: XCUIElement) -> XCUICoordinate {
-        if !element.isHittable { showControls() }
-        wait("System control missing") { element.exists && element.isHittable }
-        let frame = element.frame
-        // Resolve the accessibility element before restarting AVKit's short
-        // auto-hide timer. XCTest's element.tap() otherwise performs several
-        // fresh snapshots and can outlive the timer on a busy CI simulator.
+    func freshFrame(_ match: Match) -> CGRect {
+        // One immutable snapshot replaces exists/isHittable/frame queries that
+        // each wait and re-resolve an element while AVKit is auto-hiding it.
+        // Toggle once; if that hid the controls, toggle again to show them fresh.
         showControls()
-        Thread.sleep(forTimeInterval: 0.4)
-        showControls()
+        let deadline = Date().addingTimeInterval(8)
+        while Date() < deadline {
+            if let element = current(match), !element.frame.isEmpty { return element.frame }
+            showControls()
+            Thread.sleep(forTimeInterval: 0.15)
+        }
+        XCTFail("Native control missing\n" + app.debugDescription)
+        return .zero
+    }
+    func freshControl(_ match: Match) -> XCUICoordinate {
+        let frame = freshFrame(match)
         return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY))
     }
-    var transport: XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label MATCHES[c] '^(Play|Pause|Play Button|Pause Button|Play/Pause|Воспроизвести|Пауза)$'")).firstMatch
+    var transport: Match {
+        { element in element.elementType == .button && ["play", "pause", "play button", "pause button", "play/pause", "воспроизвести", "пауза"].contains(element.label.lowercased()) }
+    }
+    var timeline: Match {
+        { element in element.elementType == .slider &&
+            !["volume", "громкост", "brightness", "яркост"].contains(where: { element.label.localizedCaseInsensitiveContains($0) }) }
+    }
+    func seek(_ fraction: CGFloat) {
+        _ = freshFrame(timeline)
+        // This is XCTest's real native slider drag, not AVPlayer.seek().
+        let progress = app.sliders.matching(NSPredicate(format: "NOT (label CONTAINS[c] 'volume' OR label CONTAINS[c] 'громкост' OR label CONTAINS[c] 'brightness' OR label CONTAINS[c] 'яркост')")).firstMatch
+        progress.adjust(toNormalizedSliderPosition: fraction)
     }
     func setPlaying(_ playing: Bool) {
         if ((state()["rate"] as? Double ?? 0) > 0) != playing { freshControl(transport).tap() }
@@ -62,15 +89,7 @@ final class NativePlayerUITests: XCTestCase {
         print("NATIVE FULLSCREEN HIERARCHY\n" + app.debugDescription)
         let forward = button(["Forward", "вперед", "вперёд"])
         let backward = button(["Backward", "Rewind", "назад"])
-        if !forward.isHittable { showControls() }
-        let progress = app.sliders.allElementsBoundByIndex.first {
-            !$0.label.localizedCaseInsensitiveContains("volume") && !$0.label.localizedCaseInsensitiveContains("громкост") &&
-            !$0.label.localizedCaseInsensitiveContains("brightness") && !$0.label.localizedCaseInsensitiveContains("яркост")
-        }
-        XCTAssertNotNil(progress, "Native timeline missing\n" + app.debugDescription)
-        guard let progress else { return }
-        _ = freshControl(progress)
-        progress.adjust(toNormalizedSliderPosition: 0.1)
+        seek(0.1)
         setPlaying(true)
         let forwardPoint = freshControl(forward)
         let before = state()["time"] as? Double ?? 0
@@ -82,26 +101,24 @@ final class NativePlayerUITests: XCTestCase {
         wait("Native backward skip failed") { (self.state()["time"] as? Double ?? 100) < advanced - 7 }
         wait("Playback did not continue after native skip") { (self.state()["rate"] as? Double ?? 0) > 0 }
         setPlaying(false)
-        _ = freshControl(progress)
+        _ = freshFrame(timeline)
         snapshot("DR-Store-native-fullscreen")
         setPlaying(true)
-        _ = freshControl(progress)
-        progress.adjust(toNormalizedSliderPosition: 0.5)
+        seek(0.5)
         wait("Native scrub did not resume") { (self.state()["rate"] as? Double ?? 0) > 0 && (self.state()["time"] as? Double ?? 0) > 15 }
         let scrubbed = state()["time"] as? Double ?? 0
         wait("Native timeline stopped advancing") { (self.state()["time"] as? Double ?? 0) > scrubbed + 0.8 }
 
         // Native controls should disappear and return without our own overlay.
         setPlaying(false)
-        _ = freshControl(progress)
-        progress.adjust(toNormalizedSliderPosition: 0.1)
+        seek(0.1)
         setPlaying(true)
         _ = freshControl(forward)
         showControls()
-        wait("Native controls did not hide", timeout: 8) { !forward.isHittable }
+        wait("Native controls did not hide", timeout: 8) { self.current(forward) == nil }
         snapshot("DR-Store-native-controls-hidden")
         showControls()
-        wait("Native controls did not return") { forward.isHittable }
+        wait("Native controls did not return") { self.current(forward) != nil }
         let close = button(["Done", "Close", "Готово", "Закрыть", "Exit Full Screen", "Выход из полноэкран", "Свернуть"])
         freshControl(close).tap()
         wait("Native fullscreen did not return inline") { self.state()["fullscreen"] as? Bool == false }
