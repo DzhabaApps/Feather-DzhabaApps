@@ -8,14 +8,13 @@ struct AboutView: View {
 				VStack(spacing: 8) {
 					FRAppIconView(size: 72)
 					Text("DR Store").font(.largeTitle.bold())
-					Text("от DzhabaApps").font(.subheadline).foregroundStyle(.secondary)
 					Text(verbatim: .localized("Version %@", arguments: Bundle.main.version)).foregroundStyle(.secondary)
 				}.frame(maxWidth: .infinity)
 			}
 			NBSection(.localized("Credits")) {
 				LabeledContent("Feather", value: "Samara / claration, Asami")
 				LabeledContent("AltSourceKit", value: "Lakhan Lothiyi")
-				LabeledContent(.localized("Russian interface"), value: "DzhabaApps")
+				LabeledContent(.localized("Russian interface"), value: "DR Store")
 			}
 			NBSection(.localized("Licenses")) {
 				Text(.localized("Feather license explanation"))

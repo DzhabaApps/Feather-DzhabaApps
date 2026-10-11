@@ -8,7 +8,7 @@ struct FeatherAccessView: View {
     private var waiting: Bool { previewState == nil && (access.isChecking || !access.hasChecked) }
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: currentState == .expired ? "clock.badge.exclamationmark" : "leaf.fill")
+            Image(systemName: currentState == .expired ? "clock.badge.exclamationmark" : "lock.shield")
                 .font(.system(size: 52)).foregroundStyle(.secondary)
             if waiting {
                 ProgressView()
@@ -42,7 +42,7 @@ struct FeatherAccessView: View {
     private var title: String {
         switch currentState {
         case .expired: return "Доступ закончился"
-        case .disabled: return "Нужно восстановить приложение"
+        case .disabled: return "Обратитесь в поддержку"
         default: return "Не удалось проверить доступ"
         }
     }

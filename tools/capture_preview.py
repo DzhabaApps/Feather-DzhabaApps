@@ -15,6 +15,7 @@ def run(*args, **kwargs):
     return subprocess.run(args, cwd=root, check=True, text=True, **kwargs)
 
 build_log = pathlib.Path('/tmp/fizer-simulator-build.log')
+print('Building simulator application; compiler output is saved separately until completion.', flush=True)
 with build_log.open('w') as log:
     result = subprocess.run([
         'xcodebuild', '-jobs', '2', '-project', 'Feather.xcodeproj', '-scheme', 'Feather',
@@ -27,6 +28,7 @@ with build_log.open('w') as log:
 if result.returncode:
     errors = [line for line in build_log.read_text().splitlines() if 'error:' in line]
     raise RuntimeError('Simulator build failed: '+'\n'.join(errors[-12:]))
+print('Simulator application built; starting native checks and screenshots.', flush=True)
 
 devices = json.loads(run('xcrun', 'simctl', 'list', 'devices', 'available', '-j', capture_output=True).stdout)
 phone = next(d for runtime, items in devices['devices'].items() for d in items if d['name'].startswith('iPhone') and d.get('isAvailable'))
@@ -70,3 +72,6 @@ cleanup = json.loads(result.read_text())
 cleanup['commit'] = __import__('plistlib').loads((app/'Info.plist').read_bytes())['CFBundleVersion']
 (output/'Cleanup-validation.json').write_text(json.dumps(cleanup), encoding='utf-8')
 print('Native library cleanup: downloaded and prepared apps removed; installation credentials and paid-period marker preserved')
+subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
+time.sleep(3)
+run('xcrun', 'simctl', 'io', device, 'screenshot', str(output/'DR-Store-home-screen.png'))

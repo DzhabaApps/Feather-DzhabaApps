@@ -38,7 +38,7 @@ struct AppIconView: View {
 	// dont translate
 	var sections: [String: [AltIcon]] = [
 		"Основные": [
-			AltIcon(displayName: "Feather", author: "Samara", key: nil),
+			AltIcon(displayName: "DR Store", author: "Основной значок", key: nil),
 			AltIcon(displayName: "Feather (macOS)", author: "Samara", key: "V2Mac"),
 			AltIcon(displayName: "Feather v1", author: "Samara", key: "V1"),
 			AltIcon(displayName: "Feather v1 (macOS)", author: "Samara", key: "V1Mac"),

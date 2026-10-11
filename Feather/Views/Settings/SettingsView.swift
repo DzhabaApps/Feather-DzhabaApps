@@ -11,7 +11,7 @@ struct SettingsView: View {
 		switch previewState ?? access.state {
 		case .active: return "Активен"
 		case .expired: return "Закончился"
-		case .disabled: return "Требуется восстановление"
+		case .disabled: return "Обратитесь в поддержку"
 		case .verificationRequired: return "Нужна проверка через интернет"
 		}
 	}
@@ -26,8 +26,6 @@ struct SettingsView: View {
 					}
 					Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
 					Link("Поддержка", destination: URL(string: "https://t.me/dzhabaraduev")!)
-				} footer: {
-					Text("Восстановление входит в оплаченный срок доступа.")
 				}
 				SSLUpdateSection()
 				Section {
@@ -157,7 +155,7 @@ struct FizerHelpView: View {
 				Button(.localized("Contact support"), systemImage: "message") { UIApplication.open("https://t.me/dzhabaraduev") }
 			}
 			NBSection(.localized("Installation is stuck")) { Text(.localized("Installation troubleshooting")) }
-			NBSection("Подписка и восстановление") { Text(.localized("Certificate troubleshooting")) }
+			NBSection("Доступ и поддержка") { Text(.localized("Certificate troubleshooting")) }
 			NBSection(.localized("Install from repository")) { Text(.localized("Repository installation explanation")) }
 		}
 	}

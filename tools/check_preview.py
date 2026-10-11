@@ -21,6 +21,11 @@ for path in paths:
         decoded = json.loads('"'+key+'"')
         assert decoded in catalog['strings'], f'Missing catalog key in {path.name}: {decoded}'
 assert (root/'Feather/Resources/GPL-3.0.txt').is_file()
+composer = root/'Feather/Resources/AppIcon.icon'
+layers = [layer for group in json.loads((composer/'icon.json').read_text())['groups'] for layer in group['layers']]
+assert layers and all(layer['name'] == 'DR' for layer in layers), 'iOS 26 icon must use DR, not the legacy feather'
+assert all((composer/'Assets'/layer['image-name']).is_file() for layer in layers)
+print('Icon Composer: DR monogram layers verified')
 print(f"Russian catalog: {len(catalog['strings'])} entries and formatting arguments verified")
 
 parser = argparse.ArgumentParser()
