@@ -46,7 +46,7 @@ def exercise_native_ui(root, device, derived, output):
     with log.open('w') as stream:
         process = subprocess.run(['xcodebuild', 'test', '-project', 'Feather.xcodeproj',
             '-scheme', 'InstructionNativeUI', '-configuration', 'Release', '-jobs', '2',
-            '-destination', 'id='+device, '-derivedDataPath', str(derived),
+            '-destination', 'id='+device, '-parallel-testing-enabled', 'NO', '-derivedDataPath', str(derived),
             '-resultBundlePath', str(result), '-skipPackagePluginValidation',
             'CODE_SIGNING_ALLOWED=NO', 'DEPLOYMENT_LOCATION=NO'], cwd=root, stdout=stream, stderr=subprocess.STDOUT)
     if result.exists():

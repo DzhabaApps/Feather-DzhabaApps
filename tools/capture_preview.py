@@ -40,6 +40,9 @@ run('xcrun', 'simctl', 'status_bar', device, 'override', '--time', '9:41', '--ba
 run('xcrun', 'simctl', 'ui', device, 'appearance', 'light')
 app = derived/'Build/Products/Release-iphonesimulator/Feather.app'
 run('xcrun', 'simctl', 'install', device, str(app))
+# Exercise actual AVKit controls before the slower background/screenshot suite.
+from native_player_ui import exercise_native_ui
+exercise_native_ui(root, device, derived, output)
 container = exercise(root, app, device)
 validation=container/'Documents/background-validation.json'
 if validation.exists(): (output/'Background-validation.json').write_bytes(validation.read_bytes())
@@ -88,5 +91,3 @@ subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.pre
 time.sleep(3)
 run('xcrun', 'simctl', 'io', device, 'screenshot', str(output/'DR-Store-home-screen.png'))
 
-from native_player_ui import exercise_native_ui
-exercise_native_ui(root, device, derived, output)
