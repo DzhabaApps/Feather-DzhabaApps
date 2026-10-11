@@ -50,6 +50,9 @@ enum InstructionPreviewChecks {
             timings["seekFrameSeconds"] = Date().timeIntervalSince(seekStarted)
             checks["github_native_seek_frame"] = seekDone && seekFrame
             if !seekFrame { detail += "; seek error=\(seekItem.error.map { String(describing: $0) } ?? "none")" }
+            playback.pause()
+            playback.seek(30, resume: true)
+            checks["seek_resumes_requested_playback"] = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30.1) && playback.wantsPlayback && seekPlayer.rate > 0
             playback.fullScreen = true
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             checks["fullscreen_presented"] = playback.fullScreenVisible
@@ -70,7 +73,7 @@ enum InstructionPreviewChecks {
         } catch { detail = String(describing: error) }
         playback.stop()
         let result: [String: Any] = ["checks": checks, "error": detail,
-            "passed": detail.isEmpty && checks.count == 16 && checks.values.allSatisfy { $0 },
+            "passed": detail.isEmpty && checks.count == 17 && checks.values.allSatisfy { $0 },
             "timings": timings,
             "transport": transport,
             "commit": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""]

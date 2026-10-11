@@ -11,6 +11,7 @@ final class InstructionPlayback: ObservableObject {
     @Published private(set) var time = 0.0
     @Published private(set) var duration = 0.0
     @Published private(set) var playing = false
+    @Published private(set) var wantsPlayback = false
     @Published private(set) var buffering = false
     @Published var fullScreen = false
     var fullScreenVisible = false
@@ -31,6 +32,7 @@ final class InstructionPlayback: ObservableObject {
         let player = AVPlayer(playerItem: item)
         self.player = player
         buffering = true
+        wantsPlayback = true
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.player === player else { return }
@@ -39,6 +41,7 @@ final class InstructionPlayback: ObservableObject {
                 self.duration = length.isFinite ? max(0, length) : 0
                 self.playing = player.rate > 0
                 self.buffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+                if self.duration > 0, self.time >= self.duration - 0.01, player.rate == 0 { self.wantsPlayback = false }
             }
         }
         Self.active = self
@@ -53,11 +56,19 @@ final class InstructionPlayback: ObservableObject {
         player.play()
     }
 
-    func pause() { player?.pause() }
-    func toggle() { if player?.rate == 0 { player?.play() } else { pause() } }
+    func pause() { wantsPlayback = false; player?.pause() }
+    func toggle() {
+        if wantsPlayback { pause() }
+        else {
+            wantsPlayback = true
+            if duration > 0 && time >= duration - 0.1 { seek(0, resume: true) }
+            else { player?.play() }
+        }
+    }
     func seek(_ seconds: Double, resume: Bool) {
+        wantsPlayback = resume
         player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: CMTime(seconds: 0.15, preferredTimescale: 600), toleranceAfter: CMTime(seconds: 0.15, preferredTimescale: 600)) { [weak self] finished in
-            Task { @MainActor [weak self] in if finished && resume { self?.player?.play() } }
+            Task { @MainActor [weak self] in if finished && self?.wantsPlayback == true { self?.player?.play() } }
         }
     }
     func leaveInline() { if !fullScreen { stop() } }
@@ -71,7 +82,7 @@ final class InstructionPlayback: ObservableObject {
         player = nil
         resourceLoader?.invalidate()
         resourceLoader = nil
-        time = 0; duration = 0; playing = false; buffering = false
+        time = 0; duration = 0; playing = false; wantsPlayback = false; buffering = false
     }
 }
 
@@ -120,12 +131,12 @@ private struct InstructionPlayerSurface: View {
                 Spacer()
                 VStack(spacing: 6) {
                     Slider(value: Binding(get: { scrub ?? min(playback.time, max(1, playback.duration)) }, set: { scrub = $0 }), in: 0...max(1, playback.duration)) { editing in
-                        if editing { resumeAfterScrub = playback.player?.rate != 0; playback.pause() }
+                        if editing { resumeAfterScrub = playback.wantsPlayback; playback.pause() }
                         else if let target = scrub { playback.seek(target, resume: resumeAfterScrub); scrub = nil }
                     }.tint(.white).disabled(playback.duration <= 0).accessibilityLabel("Позиция видео")
                     HStack {
-                        Button { playback.toggle() } label: { Image(systemName: playback.playing ? "pause.fill" : "play.fill").frame(width: 32, height: 32) }
-                            .accessibilityLabel(playback.playing ? "Пауза" : "Воспроизвести")
+                        Button { playback.toggle() } label: { Image(systemName: playback.wantsPlayback ? "pause.fill" : "play.fill").frame(width: 32, height: 32) }
+                            .accessibilityLabel(playback.wantsPlayback ? "Пауза" : "Воспроизвести")
                         Text("\(stamp(scrub ?? playback.time)) / \(stamp(playback.duration))").font(.caption.monospacedDigit())
                         Spacer()
                     }
