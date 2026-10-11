@@ -30,6 +30,7 @@ final class InstructionPlayback: ObservableObject {
         item.preferredForwardBufferDuration = 5
         let player = AVPlayer(playerItem: item)
         self.player = player
+        buffering = true
         timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.player === player else { return }
