@@ -8,20 +8,17 @@ final class InstructionPlayback: ObservableObject {
     private static weak var active: InstructionPlayback?
     @Published private(set) var player: AVPlayer?
     @Published private(set) var error: String?
-    @Published private(set) var time = 0.0
-    @Published private(set) var duration = 0.0
-    @Published private(set) var playing = false
-    @Published private(set) var wantsPlayback = false
-    @Published private(set) var buffering = false
-    @Published private(set) var scrubbing = false
-    @Published private(set) var scrubTime = 0.0
-    private var resumeAfterScrub = false
-    private var seekGeneration = 0
-    @Published var fullScreen = false
+    private(set) var time = 0.0
+    private(set) var duration = 0.0
+    var fullScreen = false
     var fullScreenVisible = false
+    var inlineVisible = false
+    var controller: AVPlayerViewController?
+    var controllerDelegate: NSObject?
     private var timeObserver: Any?
     private var observation: NSKeyValueObservation?
     private var resourceLoader: InstructionResourceLoader?
+    private var diagnosticLabel: UILabel?
     var transportDiagnostics: [String: Int] { resourceLoader?.diagnostics ?? [:] }
 
     func start(_ url: URL) {
@@ -35,17 +32,14 @@ final class InstructionPlayback: ObservableObject {
         item.preferredForwardBufferDuration = 5
         let player = AVPlayer(playerItem: item)
         self.player = player
-        buffering = true
-        wantsPlayback = true
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.player === player else { return }
-                self.time = max(0, player.currentTime().seconds.isFinite ? player.currentTime().seconds : 0)
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self, weak player] _ in
+            Task { @MainActor [weak self, weak player] in
+                guard let self, let player, self.player === player else { return }
+                let seconds = player.currentTime().seconds
+                self.time = seconds.isFinite ? max(0, seconds) : 0
                 let length = player.currentItem?.duration.seconds ?? 0
                 self.duration = length.isFinite ? max(0, length) : 0
-                self.playing = player.rate > 0
-                self.buffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
-                if self.duration > 0, self.time >= self.duration - 0.01, player.rate == 0 { self.wantsPlayback = false }
+                self.updateDiagnostics()
             }
         }
         Self.active = self
@@ -60,157 +54,107 @@ final class InstructionPlayback: ObservableObject {
         player.play()
     }
 
-    func pause() { wantsPlayback = false; player?.pause() }
-    func toggle() {
-        if wantsPlayback { pause() }
-        else {
-            wantsPlayback = true
-            if duration > 0 && time >= duration - 0.1 { seek(0, resume: true) }
-            else { player?.play() }
+    func pause() { player?.pause() }
+    func leaveInline() {
+        inlineVisible = false
+        // AVKit presents its own fullscreen controller. That presentation can
+        // disappear/dismantle the SwiftUI host without ending this playback session.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self, !self.inlineVisible, !self.fullScreen else { return }
+            self.stop()
         }
     }
-    func seek(_ seconds: Double, resume: Bool) {
-        guard let player, seconds.isFinite else { return }
-        seekGeneration += 1
-        let generation = seekGeneration
-        let target = max(0, min(seconds, duration > 0 ? duration : seconds))
-        wantsPlayback = resume
-        time = target
-        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: CMTime(seconds: 0.15, preferredTimescale: 600), toleranceAfter: CMTime(seconds: 0.15, preferredTimescale: 600)) { [weak self, weak player] finished in
-            Task { @MainActor [weak self, weak player] in
-                guard let self, let player, self.player === player, self.seekGeneration == generation else { return }
-                if finished && self.wantsPlayback { player.play() }
-            }
+    func attachDiagnostics(to controller: AVPlayerViewController) {
+        guard Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" else { return }
+        controller.contentOverlayView?.subviews.filter { $0.accessibilityIdentifier == "instruction-ui-state" }.forEach { $0.removeFromSuperview() }
+        let label = UILabel(frame: CGRect(x: 1, y: 1, width: 2, height: 2))
+        label.text = " "
+        label.textColor = .clear
+        label.isAccessibilityElement = true
+        label.accessibilityIdentifier = "instruction-ui-state"
+        label.accessibilityLabel = "Playback diagnostics"
+        controller.contentOverlayView?.addSubview(label)
+        diagnosticLabel = label
+        updateDiagnostics()
+    }
+    private func updateDiagnostics() {
+        guard let diagnosticLabel else { return }
+        let state: [String: Any] = ["time": time, "duration": duration, "rate": player?.rate ?? 0,
+            "fullscreen": fullScreen, "ready": player?.currentItem?.status == .readyToPlay,
+            "item": player?.currentItem.map { String(ObjectIdentifier($0).hashValue) } ?? "none"]
+        if let data = try? JSONSerialization.data(withJSONObject: state), let value = String(data: data, encoding: .utf8) {
+            diagnosticLabel.accessibilityValue = value
         }
     }
-    func beginScrubbing() {
-        guard !scrubbing else { return }
-        resumeAfterScrub = wantsPlayback
-        scrubTime = time
-        scrubbing = true
-        // A drag suspends transport, but does not change the user's play/pause intent.
-        player?.pause()
-    }
-    func updateScrubbing(_ seconds: Double) {
-        guard scrubbing else { return }
-        scrubTime = max(0, min(seconds, duration))
-    }
-    func endScrubbing() {
-        guard scrubbing else { return }
-        let target = scrubTime
-        scrubbing = false
-        seek(target, resume: resumeAfterScrub && wantsPlayback)
-    }
-    func skip(_ seconds: Double) { seek(time + seconds, resume: wantsPlayback) }
-    func leaveInline() { if !fullScreen { stop() } }
     func stop() {
-        seekGeneration += 1
-        scrubbing = false; resumeAfterScrub = false; scrubTime = 0
         if Self.active === self { Self.active = nil }
         observation = nil
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
         timeObserver = nil
+        controller?.player = nil
+        controller?.delegate = nil
+        controller = nil; controllerDelegate = nil; diagnosticLabel = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
         resourceLoader?.invalidate()
         resourceLoader = nil
-        time = 0; duration = 0; playing = false; wantsPlayback = false; buffering = false
+        time = 0; duration = 0
     }
 }
 
-private final class InstructionLayerView: UIView {
-    override class var layerClass: AnyClass { AVPlayerLayer.self }
-    var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
-}
-
-private struct InstructionPlayerLayer: UIViewRepresentable {
-    let player: AVPlayer
-    func makeUIView(context: Context) -> InstructionLayerView {
-        let view = InstructionLayerView()
-        view.playerLayer.videoGravity = .resizeAspect
-        view.playerLayer.player = player
-        return view
-    }
-    func updateUIView(_ view: InstructionLayerView, context: Context) {
-        if view.playerLayer.player !== player { view.playerLayer.player = player }
-    }
-    static func dismantleUIView(_ view: InstructionLayerView, coordinator: ()) {
-        // Detach only the rendering surface. The shared playback model owns the item.
-        view.playerLayer.player = nil
-    }
-}
-
-// UIKit touch events have explicit begin/end boundaries. A SwiftUI Slider binding
-// can deliver a final value after onEditingChanged(false), leaving stale local time.
 @MainActor
-private struct InstructionSeekSlider: UIViewRepresentable {
-    @ObservedObject var playback: InstructionPlayback
+private struct InstructionNativePlayer: UIViewControllerRepresentable {
+    let playback: InstructionPlayback
     func makeCoordinator() -> Coordinator { Coordinator(playback) }
-    func makeUIView(context: Context) -> UISlider {
-        let slider = UISlider()
-        slider.minimumValue = 0
-        slider.minimumTrackTintColor = .white
-        slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.35)
-        slider.accessibilityLabel = "Позиция видео"
-        slider.accessibilityIdentifier = "instruction-seek-slider"
-        slider.addTarget(context.coordinator, action: #selector(Coordinator.begin(_:)), for: .touchDown)
-        slider.addTarget(context.coordinator, action: #selector(Coordinator.change(_:)), for: .valueChanged)
-        slider.addTarget(context.coordinator, action: #selector(Coordinator.end(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        return slider
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = playback.player
+        controller.showsPlaybackControls = true
+        controller.allowsPictureInPicturePlayback = false
+        controller.videoGravity = .resizeAspect
+        controller.delegate = context.coordinator
+        playback.controller = controller
+        playback.controllerDelegate = context.coordinator
+        controller.loadViewIfNeeded()
+        playback.attachDiagnostics(to: controller)
+        return controller
     }
-    func updateUIView(_ slider: UISlider, context: Context) {
-        slider.maximumValue = Float(max(1, playback.duration))
-        slider.isEnabled = playback.duration > 0
-        if !slider.isTracking && !playback.scrubbing { slider.value = Float(playback.time) }
-    }
-    @MainActor
-    final class Coordinator: NSObject {
-        let playback: InstructionPlayback
-        init(_ playback: InstructionPlayback) { self.playback = playback }
-        @objc func begin(_ slider: UISlider) { playback.beginScrubbing() }
-        @objc func change(_ slider: UISlider) { playback.updateScrubbing(Double(slider.value)) }
-        @objc func end(_ slider: UISlider) {
-            playback.updateScrubbing(Double(slider.value))
-            playback.endScrubbing()
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== playback.player {
+            controller.player = playback.player
+            controller.delegate = context.coordinator
+            playback.controller = controller
+            playback.controllerDelegate = context.coordinator
+            playback.attachDiagnostics(to: controller)
         }
     }
-}
-
-private struct InstructionPlayerSurface: View {
-    @ObservedObject var playback: InstructionPlayback
-    let expanded: Bool
-    private func stamp(_ value: Double) -> String { let value = Int(max(0, value)); return String(format: "%d:%02d", value / 60, value % 60) }
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            if let player = playback.player { InstructionPlayerLayer(player: player).ignoresSafeArea(edges: expanded ? .all : []) }
-            if playback.buffering { ProgressView().tint(.white).accessibilityLabel("Загрузка видео") }
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { playback.fullScreen = !expanded } label: {
-                        Image(systemName: expanded ? "xmark" : "arrow.up.left.and.arrow.down.right")
-                            .font(.body.weight(.semibold)).padding(13).background(.black.opacity(0.55), in: Circle())
-                    }.accessibilityLabel(expanded ? "Закрыть полный экран" : "На весь экран")
-                        .accessibilityIdentifier(expanded ? "instruction-close-fullscreen" : "instruction-fullscreen")
-                }
-                Spacer()
-                VStack(spacing: 6) {
-                    InstructionSeekSlider(playback: playback).frame(height: 32)
-                    HStack {
-                        Button { playback.toggle() } label: { Image(systemName: playback.wantsPlayback ? "pause.fill" : "play.fill").frame(width: 32, height: 32) }
-                            .accessibilityLabel(playback.wantsPlayback ? "Пауза" : "Воспроизвести")
-                            .accessibilityIdentifier("instruction-toggle")
-                        Button { playback.skip(-10) } label: { Image(systemName: "gobackward.10").frame(width: 36, height: 36) }
-                            .accessibilityLabel("Назад на 10 секунд")
-                        Button { playback.skip(10) } label: { Image(systemName: "goforward.10").frame(width: 36, height: 36) }
-                            .accessibilityLabel("Вперёд на 10 секунд")
-                        Text("\(stamp(playback.scrubbing ? playback.scrubTime : playback.time)) / \(stamp(playback.duration))").font(.caption.monospacedDigit())
-                        Spacer()
-                    }
-                }.padding(10).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))
-            }.padding(expanded ? 20 : 10).foregroundStyle(.white)
+    static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
+        // The session retains both controller and delegate across AVKit fullscreen
+        // transitions. Only leaving the instruction releases the player's item.
+    }
+    @MainActor
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        weak var playback: InstructionPlayback?
+        init(_ playback: InstructionPlayback) { self.playback = playback }
+        func playerViewController(_ playerViewController: AVPlayerViewController,
+                                  willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator) {
+            playback?.fullScreen = true
+            coordinator.animate(alongsideTransition: nil) { [playback = self.playback] transition in
+                playback?.fullScreen = !transition.isCancelled
+                playback?.fullScreenVisible = !transition.isCancelled
+            }
+        }
+        func playerViewController(_ playerViewController: AVPlayerViewController,
+                                  willEndFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator) {
+            // AVKit can pause while collapsing; restore the prior transport state.
+            let resume = (playerViewController.player?.rate ?? 0) > 0
+            coordinator.animate(alongsideTransition: nil) { [playback = self.playback] transition in
+                guard !transition.isCancelled else { return }
+                playback?.fullScreen = false
+                playback?.fullScreenVisible = false
+                if resume { playerViewController.player?.play() }
+            }
         }
     }
 }
@@ -233,8 +177,8 @@ struct InstructionVideoCard: View {
             Text(instruction.title).font(.headline)
             ZStack {
                 Color.black
-                if let player = playback.player, playback.error == nil {
-                    if !playback.fullScreen { InstructionPlayerSurface(playback: playback, expanded: false) }
+                if playback.player != nil, playback.error == nil {
+                    InstructionNativePlayer(playback: playback)
                 } else {
                     Button {
                         playback.start(instruction.video_url)
@@ -247,7 +191,7 @@ struct InstructionVideoCard: View {
                             Image(systemName: "play.circle.fill").font(.system(size: 58))
                                 .symbolRenderingMode(.palette).foregroundStyle(.white, .black.opacity(0.5))
                         }
-                    }.buttonStyle(.plain).accessibilityLabel("Смотреть видео: \(instruction.title)")
+                    }.buttonStyle(.plain).accessibilityLabel("Смотреть видео: \(instruction.title)").accessibilityIdentifier("instruction-start")
                 }
             }
             .frame(height: instruction.aspect_ratio < 1 ? 330 : 205)
@@ -265,11 +209,7 @@ struct InstructionVideoCard: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $playback.fullScreen) {
-            InstructionPlayerSurface(playback: playback, expanded: true)
-                .onAppear { playback.fullScreenVisible = true }
-                .onDisappear { playback.fullScreenVisible = false }
-        }
+        .onAppear { playback.inlineVisible = true }
         .onDisappear { playback.leaveInline() }
         .onChange(of: scenePhase) { phase in if phase != .active { playback.pause() } }
     }

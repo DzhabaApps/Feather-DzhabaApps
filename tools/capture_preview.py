@@ -60,13 +60,8 @@ env = os.environ.copy(); env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN'] = 'instruction
 run('xcrun', 'simctl', 'launch', device, 'ru.dzhabaapps.fizer.preview', env=env)
 instruction_result = container/'Documents/instruction-validation.json'
 deadline = time.monotonic()+160
-fullscreen_captured = False
 while time.monotonic()<deadline and not instruction_result.exists():
-    if not fullscreen_captured and (container/'Documents/instruction-fullscreen-ready.json').exists():
-        run('xcrun', 'simctl', 'io', device, 'screenshot', str(output/'DR-Store-video-fullscreen.png'))
-        fullscreen_captured = True
     time.sleep(0.5)
-assert fullscreen_captured, 'Fullscreen presentation was not exercised'
 assert instruction_result.exists(), 'Native instruction player validation timed out'
 instruction_checks = json.loads(instruction_result.read_text())
 (output/'Instruction-validation.json').write_text(json.dumps(instruction_checks), encoding='utf-8')
@@ -92,3 +87,6 @@ print('Native library cleanup: downloaded and prepared apps removed; installatio
 subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
 time.sleep(3)
 run('xcrun', 'simctl', 'io', device, 'screenshot', str(output/'DR-Store-home-screen.png'))
+
+from native_player_ui import exercise_native_ui
+exercise_native_ui(root, device, derived, output)

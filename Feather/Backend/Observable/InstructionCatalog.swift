@@ -17,8 +17,8 @@ struct StoreInstruction: Codable, Identifiable, Equatable {
         description: "Тестовый ролик для проверки плеера. Настоящие инструкции появятся позже.",
         steps: ["Нажмите на обложку, чтобы включить видео.", "Попробуйте перемотку и полноэкранный режим."],
         bundle_ids: ["net.whatsapp.WhatsApp1"],
-        video_url: URL(string: "https://github.com/DzhabaApps/Dzhaba-Apps/releases/download/dr-store-video-instructions/technical-playback-test.mp4")!,
-        cover_url: URL(string: "https://github.com/DzhabaApps/Dzhaba-Apps/releases/download/dr-store-video-instructions/technical-playback-test.jpg")!,
+        video_url: URL(string: "https://github.com/DzhabaApps/Dzhaba-Apps/releases/download/dr-store-video-instructions/instruction-c8521388-2799-423c-9d2e-e23f160d5ade-video-c579e69c9e793e7fa34a.mp4")!,
+        cover_url: URL(string: "https://github.com/DzhabaApps/Dzhaba-Apps/releases/download/dr-store-video-instructions/instruction-c8521388-2799-423c-9d2e-e23f160d5ade-cover-c65db1a83926f2418489.jpg")!,
         aspect_ratio: 0.5625, is_test: true)
 
     static func isTrusted(_ url: URL) -> Bool {
