@@ -17,7 +17,7 @@ def run(*args, **kwargs):
 build_log = pathlib.Path('/tmp/fizer-simulator-build.log')
 with build_log.open('w') as log:
     result = subprocess.run([
-        'xcodebuild', '-project', 'Feather.xcodeproj', '-scheme', 'Feather',
+        'xcodebuild', '-jobs', '2', '-project', 'Feather.xcodeproj', '-scheme', 'Feather',
         '-configuration', 'Release', '-sdk', 'iphonesimulator',
         '-destination', 'generic/platform=iOS Simulator',
         '-derivedDataPath', str(derived), '-skipPackagePluginValidation',

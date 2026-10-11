@@ -53,6 +53,7 @@ $(PLATFORMS): deps
 		DEST="generic/platform=macOS,variant=Mac Catalyst"; \
 	fi; \
 	xcodebuild \
+		-jobs 2 \
 		-project Feather.xcodeproj \
 		-scheme $(SCHEME) \
 		-configuration Release \
