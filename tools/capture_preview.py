@@ -43,7 +43,7 @@ run('xcrun', 'simctl', 'install', device, str(app))
 container = exercise(root, app, device)
 validation=container/'Documents/background-validation.json'
 if validation.exists(): (output/'Background-validation.json').write_bytes(validation.read_bytes())
-screens = ['library', 'copies', 'new-copy', 'store-news', 'app-detail', 'settings', 'installation', 'storage', 'advanced', 'help', 'access-expired', 'access-offline', 'access-checking', 'cancellation-check', 'store', 'store-finance', 'store-social', 'store-games']
+screens = ['instructions', 'instruction-detail', 'library', 'copies', 'new-copy', 'store-news', 'app-detail', 'settings', 'installation', 'storage', 'advanced', 'help', 'access-expired', 'access-offline', 'access-checking', 'cancellation-check', 'store', 'store-finance', 'store-social', 'store-games']
 for screen in screens:
     subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
     env = os.environ.copy()
@@ -55,6 +55,17 @@ for screen in screens:
     run('xcrun', 'simctl', 'io', device, 'screenshot', str(path))
     assert path.stat().st_size > 10000
 print(f'Native iOS Simulator screenshots: {len(screens)} screens captured')
+subprocess.run(['xcrun', 'simctl', 'terminate', device, 'ru.dzhabaapps.fizer.preview'], cwd=root, capture_output=True)
+env = os.environ.copy(); env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN'] = 'instruction-check'
+run('xcrun', 'simctl', 'launch', device, 'ru.dzhabaapps.fizer.preview', env=env)
+instruction_result = container/'Documents/instruction-validation.json'
+deadline = time.monotonic()+130
+while time.monotonic()<deadline and not instruction_result.exists(): time.sleep(1)
+assert instruction_result.exists(), 'Native instruction player validation timed out'
+instruction_checks = json.loads(instruction_result.read_text())
+(output/'Instruction-validation.json').write_text(json.dumps(instruction_checks), encoding='utf-8')
+assert instruction_checks['passed'], instruction_checks
+print('Native instruction player: remote GitHub frames, seeking, pause and cleanup passed.', flush=True)
 cancel_validation = container/'Documents/cancellation-validation.json'
 cancel_checks = json.loads(cancel_validation.read_text())
 assert cancel_checks and all(value is True for value in cancel_checks.values()), cancel_checks

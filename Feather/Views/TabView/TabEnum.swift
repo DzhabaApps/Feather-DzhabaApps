@@ -11,12 +11,14 @@ import NimbleViews
 enum TabEnum: String, CaseIterable, Hashable {
 	case sources
 	case library
+	case instructions
 	case settings
 	
 	var title: String {
 		switch self {
 		case .sources:     	return "Каталог"
 		case .library: 		return .localized("Library")
+		case .instructions: return "Инструкции"
 		case .settings: 	return .localized("Settings")
 		}
 	}
@@ -25,6 +27,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch self {
 		case .sources: 		return "bag"
 		case .library: 		return "square.grid.2x2"
+		case .instructions: return "play.rectangle"
 		case .settings: 	return "gearshape.2"
 		}
 	}
@@ -34,6 +37,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		switch tab {
 		case .sources: SourcesView()
 		case .library: LibraryView()
+		case .instructions: InstructionsView()
 		case .settings: SettingsView()
 		}
 	}
@@ -42,6 +46,7 @@ enum TabEnum: String, CaseIterable, Hashable {
 		return [
 			.sources,
 			.library,
+			.instructions,
 			.settings
 		]
 	}

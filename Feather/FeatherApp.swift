@@ -91,6 +91,9 @@ struct FeatherApp: App {
 	@ViewBuilder
 	private func _previewScreen(_ screen: String) -> some View {
 		switch screen {
+		case "instructions": InstructionsView(preview: true)
+		case "instruction-detail": NavigationStack { ScrollView { InstructionVideoCard(instruction: .sample).padding() }.navigationTitle("Инструкция") }
+		case "instruction-check": InstructionsView(preview: true).task { await InstructionPreviewChecks.run() }
 		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
         case "access-checking": FeatherAccessView(access: access)

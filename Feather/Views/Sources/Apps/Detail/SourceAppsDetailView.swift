@@ -67,6 +67,7 @@ struct SourceAppsDetailView: View {
 				_infoPills(app: app)
 				Divider()
                 
+				AppInstructionsBlock(bundleID: app.id)
 				if let screenshotURLs = app.screenshotURLs, !screenshotURLs.isEmpty {
 					NBSection(.localized("Screenshots")) {
 						_screenshots(screenshotURLs: screenshotURLs)
@@ -142,6 +143,7 @@ struct SourceAppsDetailView: View {
 			}())
 		}
 		.flexibleHeaderScrollView()
+		.task { await InstructionCatalog.shared.load() }
 		.shouldSetInset()
 		.toolbar {
 			NBToolbarButton(
