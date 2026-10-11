@@ -59,8 +59,8 @@ final class InstructionPlayback: ObservableObject {
         inlineVisible = false
         // AVKit presents its own fullscreen controller. That presentation can
         // disappear/dismantle the SwiftUI host without ending this playback session.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            guard let self, !self.inlineVisible, !self.fullScreen else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [self] in
+            guard !inlineVisible, !fullScreen else { return }
             self.stop()
         }
     }
@@ -135,7 +135,9 @@ private struct InstructionNativePlayer: UIViewControllerRepresentable {
     }
     @MainActor
     final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
-        weak var playback: InstructionPlayback?
+        // Keep the session alive if SwiftUI dismantles its inline host while
+        // AVKit owns fullscreen. stop() explicitly releases this ownership.
+        let playback: InstructionPlayback?
         init(_ playback: InstructionPlayback) { self.playback = playback }
         func playerViewController(_ playerViewController: AVPlayerViewController,
                                   willBeginFullScreenPresentationWithAnimationCoordinator coordinator: UIViewControllerTransitionCoordinator) {
@@ -154,6 +156,7 @@ private struct InstructionNativePlayer: UIViewControllerRepresentable {
                 playback?.fullScreen = false
                 playback?.fullScreenVisible = false
                 if resume { playerViewController.player?.play() }
+                if playback?.inlineVisible == false { playback?.leaveInline() }
             }
         }
     }
