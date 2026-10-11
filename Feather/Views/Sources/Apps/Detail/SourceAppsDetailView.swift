@@ -67,7 +67,7 @@ struct SourceAppsDetailView: View {
 				_infoPills(app: app)
 				Divider()
                 
-				AppInstructionsBlock(bundleID: app.id)
+				if let bundleID = app.id { AppInstructionsBlock(bundleID: bundleID) }
 				if let screenshotURLs = app.screenshotURLs, !screenshotURLs.isEmpty {
 					NBSection(.localized("Screenshots")) {
 						_screenshots(screenshotURLs: screenshotURLs)

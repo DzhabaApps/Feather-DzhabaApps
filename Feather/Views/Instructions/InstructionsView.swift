@@ -39,7 +39,6 @@ final class InstructionPlayback: ObservableObject {
         player?.replaceCurrentItem(with: nil)
         player = nil
     }
-    deinit { player?.pause() }
 }
 
 private struct InlineInstructionPlayer: UIViewControllerRepresentable {
