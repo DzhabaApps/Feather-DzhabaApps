@@ -13,6 +13,10 @@ final class InstructionPlayback: ObservableObject {
     @Published private(set) var playing = false
     @Published private(set) var wantsPlayback = false
     @Published private(set) var buffering = false
+    @Published private(set) var scrubbing = false
+    @Published private(set) var scrubTime = 0.0
+    private var resumeAfterScrub = false
+    private var seekGeneration = 0
     @Published var fullScreen = false
     var fullScreenVisible = false
     private var timeObserver: Any?
@@ -66,13 +70,42 @@ final class InstructionPlayback: ObservableObject {
         }
     }
     func seek(_ seconds: Double, resume: Bool) {
+        guard let player, seconds.isFinite else { return }
+        seekGeneration += 1
+        let generation = seekGeneration
+        let target = max(0, min(seconds, duration > 0 ? duration : seconds))
         wantsPlayback = resume
-        player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600), toleranceBefore: CMTime(seconds: 0.15, preferredTimescale: 600), toleranceAfter: CMTime(seconds: 0.15, preferredTimescale: 600)) { [weak self] finished in
-            Task { @MainActor [weak self] in if finished && self?.wantsPlayback == true { self?.player?.play() } }
+        time = target
+        player.seek(to: CMTime(seconds: target, preferredTimescale: 600), toleranceBefore: CMTime(seconds: 0.15, preferredTimescale: 600), toleranceAfter: CMTime(seconds: 0.15, preferredTimescale: 600)) { [weak self, weak player] finished in
+            Task { @MainActor [weak self, weak player] in
+                guard let self, let player, self.player === player, self.seekGeneration == generation else { return }
+                if finished && self.wantsPlayback { player.play() }
+            }
         }
     }
+    func beginScrubbing() {
+        guard !scrubbing else { return }
+        resumeAfterScrub = wantsPlayback
+        scrubTime = time
+        scrubbing = true
+        // A drag suspends transport, but does not change the user's play/pause intent.
+        player?.pause()
+    }
+    func updateScrubbing(_ seconds: Double) {
+        guard scrubbing else { return }
+        scrubTime = max(0, min(seconds, duration))
+    }
+    func endScrubbing() {
+        guard scrubbing else { return }
+        let target = scrubTime
+        scrubbing = false
+        seek(target, resume: resumeAfterScrub && wantsPlayback)
+    }
+    func skip(_ seconds: Double) { seek(time + seconds, resume: wantsPlayback) }
     func leaveInline() { if !fullScreen { stop() } }
     func stop() {
+        seekGeneration += 1
+        scrubbing = false; resumeAfterScrub = false; scrubTime = 0
         if Self.active === self { Self.active = nil }
         observation = nil
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
@@ -108,11 +141,43 @@ private struct InstructionPlayerLayer: UIViewRepresentable {
     }
 }
 
+// UIKit touch events have explicit begin/end boundaries. A SwiftUI Slider binding
+// can deliver a final value after onEditingChanged(false), leaving stale local time.
+private struct InstructionSeekSlider: UIViewRepresentable {
+    @ObservedObject var playback: InstructionPlayback
+    func makeCoordinator() -> Coordinator { Coordinator(playback) }
+    func makeUIView(context: Context) -> UISlider {
+        let slider = UISlider()
+        slider.minimumValue = 0
+        slider.minimumTrackTintColor = .white
+        slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.35)
+        slider.accessibilityLabel = "Позиция видео"
+        slider.accessibilityIdentifier = "instruction-seek-slider"
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.begin(_:)), for: .touchDown)
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.change(_:)), for: .valueChanged)
+        slider.addTarget(context.coordinator, action: #selector(Coordinator.end(_:)), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        return slider
+    }
+    func updateUIView(_ slider: UISlider, context: Context) {
+        slider.maximumValue = Float(max(1, playback.duration))
+        slider.isEnabled = playback.duration > 0
+        if !slider.isTracking && !playback.scrubbing { slider.value = Float(playback.time) }
+    }
+    final class Coordinator: NSObject {
+        let playback: InstructionPlayback
+        init(_ playback: InstructionPlayback) { self.playback = playback }
+        @objc func begin(_ slider: UISlider) { playback.beginScrubbing() }
+        @objc func change(_ slider: UISlider) { playback.updateScrubbing(Double(slider.value)) }
+        @objc func end(_ slider: UISlider) {
+            playback.updateScrubbing(Double(slider.value))
+            playback.endScrubbing()
+        }
+    }
+}
+
 private struct InstructionPlayerSurface: View {
     @ObservedObject var playback: InstructionPlayback
     let expanded: Bool
-    @State private var scrub: Double?
-    @State private var resumeAfterScrub = false
     private func stamp(_ value: Double) -> String { let value = Int(max(0, value)); return String(format: "%d:%02d", value / 60, value % 60) }
     var body: some View {
         ZStack {
@@ -130,14 +195,16 @@ private struct InstructionPlayerSurface: View {
                 }
                 Spacer()
                 VStack(spacing: 6) {
-                    Slider(value: Binding(get: { scrub ?? min(playback.time, max(1, playback.duration)) }, set: { scrub = $0 }), in: 0...max(1, playback.duration)) { editing in
-                        if editing { resumeAfterScrub = playback.wantsPlayback; playback.pause() }
-                        else if let target = scrub { playback.seek(target, resume: resumeAfterScrub); scrub = nil }
-                    }.tint(.white).disabled(playback.duration <= 0).accessibilityLabel("Позиция видео")
+                    InstructionSeekSlider(playback: playback).frame(height: 32)
                     HStack {
                         Button { playback.toggle() } label: { Image(systemName: playback.wantsPlayback ? "pause.fill" : "play.fill").frame(width: 32, height: 32) }
                             .accessibilityLabel(playback.wantsPlayback ? "Пауза" : "Воспроизвести")
-                        Text("\(stamp(scrub ?? playback.time)) / \(stamp(playback.duration))").font(.caption.monospacedDigit())
+                            .accessibilityIdentifier("instruction-toggle")
+                        Button { playback.skip(-10) } label: { Image(systemName: "gobackward.10").frame(width: 36, height: 36) }
+                            .accessibilityLabel("Назад на 10 секунд")
+                        Button { playback.skip(10) } label: { Image(systemName: "goforward.10").frame(width: 36, height: 36) }
+                            .accessibilityLabel("Вперёд на 10 секунд")
+                        Text("\(stamp(playback.scrubbing ? playback.scrubTime : playback.time)) / \(stamp(playback.duration))").font(.caption.monospacedDigit())
                         Spacer()
                     }
                 }.padding(10).background(.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 12))

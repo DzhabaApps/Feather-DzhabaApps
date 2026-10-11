@@ -53,11 +53,22 @@ enum InstructionPreviewChecks {
             playback.pause()
             playback.seek(30, resume: true)
             checks["seek_resumes_requested_playback"] = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30.1) && playback.wantsPlayback && seekPlayer.rate > 0
+            await exerciseSlider(playback, prefix: "inline", checks: &checks)
+            playback.seek(30, resume: true)
+            _ = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30.1)
             playback.fullScreen = true
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             checks["fullscreen_presented"] = playback.fullScreenVisible
             checks["fullscreen_keeps_same_item"] = playback.player === seekPlayer && seekPlayer.currentItem === seekItem
             checks["fullscreen_has_video_frame"] = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30.5)
+            await exerciseSlider(playback, prefix: "fullscreen", checks: &checks)
+            playback.pause()
+            playback.skip(-100)
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            checks["skip_back_clamps_and_preserves_pause"] = playback.time < 0.3 && !playback.wantsPlayback && seekPlayer.rate == 0
+            playback.toggle()
+            playback.skip(10)
+            checks["skip_forward_resumes"] = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 10.3) && playback.wantsPlayback
             let signal = URL.documentsDirectory.appendingPathComponent("instruction-fullscreen-ready.json")
             try? Data("{\"ready\":true}".utf8).write(to: signal, options: .atomic)
             try? await Task.sleep(nanoseconds: 6_000_000_000)
@@ -73,7 +84,7 @@ enum InstructionPreviewChecks {
         } catch { detail = String(describing: error) }
         playback.stop()
         let result: [String: Any] = ["checks": checks, "error": detail,
-            "passed": detail.isEmpty && checks.count == 17 && checks.values.allSatisfy { $0 },
+            "passed": detail.isEmpty && checks.count == 27 && checks.values.allSatisfy { $0 },
             "timings": timings,
             "transport": transport,
             "commit": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""]
@@ -81,6 +92,45 @@ enum InstructionPreviewChecks {
         if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: url, options: .atomic)
         }
+    }
+
+    // Exercise the installed UISlider targets, rather than bypassing the control
+    // with a direct AVPlayer.seek (which missed the original stuck-slider bug).
+    private static func exerciseSlider(_ playback: InstructionPlayback, prefix: String, checks: inout [String: Bool]) async {
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        func find(_ view: UIView) -> UISlider? {
+            if let slider = view as? UISlider, slider.accessibilityIdentifier == "instruction-seek-slider", !slider.isHidden { return slider }
+            for child in view.subviews.reversed() { if let slider = find(child) { return slider } }
+            return nil
+        }
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        guard let slider = windows.reversed().compactMap({ find($0) }).first else {
+            for key in ["drag_resumes", "slider_keeps_advancing", "paused_drag_stays_paused", "manual_play_updates_slider"] { checks[prefix + "_" + key] = false }
+            return
+        }
+        func drag(_ target: Float) {
+            slider.sendActions(for: .touchDown)
+            slider.value = target
+            slider.sendActions(for: .valueChanged)
+            slider.sendActions(for: .touchUpInside)
+            // Late/duplicate callbacks must not leave the UI in a dragging state.
+            slider.sendActions(for: .valueChanged)
+            slider.sendActions(for: .touchUpOutside)
+        }
+        drag(24)
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        checks[prefix + "_drag_resumes"] = playback.wantsPlayback && (playback.player?.rate ?? 0) > 0 && !playback.scrubbing
+        let previous = Double(slider.value)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+        checks[prefix + "_slider_keeps_advancing"] = Double(slider.value) > previous + 0.5 && abs(Double(slider.value) - playback.time) < 0.5
+        playback.pause()
+        drag(12)
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        checks[prefix + "_paused_drag_stays_paused"] = !playback.wantsPlayback && playback.player?.rate == 0 && abs(playback.time - 12) < 0.5
+        let pausedValue = Double(slider.value)
+        playback.toggle()
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        checks[prefix + "_manual_play_updates_slider"] = Double(slider.value) > pausedValue + 0.5 && abs(Double(slider.value) - playback.time) < 0.5 && !playback.scrubbing
     }
 
     private static func waitForFrame(_ player: AVPlayer, _ item: AVPlayerItem, _ output: AVPlayerItemVideoOutput, after seconds: Double) async -> Bool {
