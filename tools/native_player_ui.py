@@ -1,5 +1,5 @@
 """Run actual XCTest taps/drags on AVKit, with native screenshots and failure logs."""
-import json, pathlib, shutil, subprocess, zipfile
+import json, pathlib, shutil, subprocess, zipfile, platform
 
 def prepare_native_ui(root):
     probe = subprocess.run(['ruby', '-r', 'xcodeproj', '-e', 'puts Xcodeproj::VERSION'], capture_output=True)
@@ -27,8 +27,10 @@ exit 0 if project.targets.any? { |target| target.name == 'InstructionNativeUITes
 target = project.new_target(:ui_test_bundle, 'InstructionNativeUITests', :ios, '15.0')
 file = project.main_group.new_file(File.join(root, 'tools/native-player-ui/NativePlayerUITests.swift'))
 target.source_build_phase.add_file_reference(file)
-target.add_dependency(app)
 target.build_configurations.each do |config|
+  config.build_settings['PRODUCT_NAME'] = 'InstructionNativeUITests'
+  config.build_settings['PRODUCT_MODULE_NAME'] = 'InstructionNativeUITests'
+  config.build_settings['ONLY_ACTIVE_ARCH'] = 'YES'
   config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'ru.dzhabaapps.instruction.uitests'
   config.build_settings['GENERATE_INFOPLIST_FILE'] = 'YES'
   config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -40,6 +42,12 @@ scheme.add_build_target(app)
 scheme.add_test_target(target)
 scheme.test_action.build_configuration = 'Release'
 scheme.save_as(project.path, 'InstructionNativeUI', true)
+# Build the XCTest bundle alone before the expensive application build. The
+# normal UI scheme still builds the app before executing the same tests.
+preflight = Xcodeproj::XCScheme.new
+preflight.add_build_target(target)
+preflight.build_action.build_implicit_dependencies = false
+preflight.save_as(project.path, 'InstructionNativeUIPreflight', true)
 project.save
 '''
     subprocess.run(['ruby', '-e', ruby, str(root)], check=True)
@@ -54,7 +62,7 @@ def exercise_native_ui(root, device, derived, output):
         process = subprocess.run(['xcodebuild', 'test', '-project', 'Feather.xcodeproj',
             '-scheme', 'InstructionNativeUI', '-configuration', 'Release', '-jobs', '2',
             '-destination', 'id='+device, '-parallel-testing-enabled', 'NO', '-derivedDataPath', str(derived),
-            '-resultBundlePath', str(result), '-skipPackagePluginValidation',
+            '-resultBundlePath', str(result), '-skipPackagePluginValidation', 'ONLY_ACTIVE_ARCH=YES', 'ARCHS='+platform.machine(),
             'CODE_SIGNING_ALLOWED=NO', 'DEPLOYMENT_LOCATION=NO'], cwd=root, stdout=stream, stderr=subprocess.STDOUT)
     if result.exists():
         attachments = pathlib.Path('/tmp/InstructionNativeAttachments')
@@ -75,4 +83,19 @@ def exercise_native_ui(root, device, derived, output):
     print('Native AVKit XCTest: fullscreen, system skip/scrub, hiding controls and repeated return passed.', flush=True)
 
 if __name__ == '__main__':
-    prepare_native_ui(pathlib.Path(__file__).resolve().parents[1])
+    root = pathlib.Path(__file__).resolve().parents[1]
+    prepare_native_ui(root)
+    log = pathlib.Path('/tmp/instruction-ui-preflight.log')
+    with log.open('w') as stream:
+        result = subprocess.run(['xcodebuild', 'build', '-project', 'Feather.xcodeproj',
+            '-scheme', 'InstructionNativeUIPreflight', '-configuration', 'Release',
+            '-sdk', 'iphonesimulator', '-destination', 'generic/platform=iOS Simulator',
+            '-derivedDataPath', '/tmp/FizerSimulator', '-skipPackagePluginValidation',
+            'ONLY_ACTIVE_ARCH=YES', 'ARCHS='+platform.machine(), 'CODE_SIGNING_ALLOWED=NO',
+            'DEPLOYMENT_LOCATION=NO'], cwd=root, stdout=stream, stderr=subprocess.STDOUT)
+    text = log.read_text(errors='replace')
+    if result.returncode:
+        print(text[-18000:], flush=True)
+        raise RuntimeError('Native UI test bundle preflight did not compile')
+    assert 'NativePlayerUITests.swift' in text, 'Preflight did not compile the actual XCTest source'
+    print('Actual XCTest source and named test bundle compiled before app build.', flush=True)

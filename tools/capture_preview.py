@@ -5,6 +5,7 @@ import pathlib
 import plistlib
 import subprocess
 import time
+import platform
 from background_preview import exercise
 
 root = pathlib.Path(__file__).resolve().parents[1]
@@ -24,6 +25,7 @@ with build_log.open('w') as log:
         '-derivedDataPath', str(derived), '-skipPackagePluginValidation',
         'CODE_SIGNING_ALLOWED=NO', 'DEPLOYMENT_LOCATION=NO',
         'PRODUCT_BUNDLE_IDENTIFIER=ru.dzhabaapps.fizer.preview',
+        'ONLY_ACTIVE_ARCH=YES', 'ARCHS='+platform.machine(),
     ], cwd=root, stdout=log, stderr=subprocess.STDOUT)
 if result.returncode:
     errors = [line for line in build_log.read_text().splitlines() if 'error:' in line]
