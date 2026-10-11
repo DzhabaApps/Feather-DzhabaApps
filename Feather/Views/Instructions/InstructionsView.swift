@@ -143,6 +143,7 @@ private struct InstructionPlayerLayer: UIViewRepresentable {
 
 // UIKit touch events have explicit begin/end boundaries. A SwiftUI Slider binding
 // can deliver a final value after onEditingChanged(false), leaving stale local time.
+@MainActor
 private struct InstructionSeekSlider: UIViewRepresentable {
     @ObservedObject var playback: InstructionPlayback
     func makeCoordinator() -> Coordinator { Coordinator(playback) }
@@ -163,6 +164,7 @@ private struct InstructionSeekSlider: UIViewRepresentable {
         slider.isEnabled = playback.duration > 0
         if !slider.isTracking && !playback.scrubbing { slider.value = Float(playback.time) }
     }
+    @MainActor
     final class Coordinator: NSObject {
         let playback: InstructionPlayback
         init(_ playback: InstructionPlayback) { self.playback = playback }
