@@ -13,6 +13,13 @@ require 'xcodeproj'
 objects = Xcodeproj::Project::Object
 attribute = objects::PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet.attributes.find { |a| a.name == :build_phase }
 attribute.classes |= [objects::PBXResourcesBuildPhase]
+# The gem's comment generator also assumes a named source/copy phase. This
+# string is only an OpenStep plist annotation, never a build setting.
+objects::PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet.class_eval do
+  def display_name
+    'Synchronized build phase exceptions'
+  end
+end
 root = ARGV[0]
 project = Xcodeproj::Project.open(File.join(root, 'Feather.xcodeproj'))
 app = project.targets.find { |target| target.name == 'Feather' }
