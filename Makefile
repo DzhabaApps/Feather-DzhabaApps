@@ -8,7 +8,7 @@ CERT_JSON_URL := https://backloop.dev/pack.json
 
 .PHONY: all clean deps verify preview-screenshots $(PLATFORMS)
 
-all: verify $(PLATFORMS) preview-screenshots
+all: verify deps preview-screenshots $(PLATFORMS)
 
 verify:
 	python3 tools/native_player_ui.py --prepare

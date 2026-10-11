@@ -11,6 +11,7 @@ from background_preview import exercise
 root = pathlib.Path(__file__).resolve().parents[1]
 derived = pathlib.Path('/tmp/FizerSimulator')
 output = root/'packages'
+output.mkdir(exist_ok=True)
 
 def run(*args, **kwargs):
     return subprocess.run(args, cwd=root, check=True, text=True, **kwargs)

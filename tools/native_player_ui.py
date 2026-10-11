@@ -77,6 +77,17 @@ def exercise_native_ui(root, device, derived, output):
         'scenarios':['fullscreen entry','same item retained','native forward/back skip','native timeline drag/resume/progress',
                      'controls hide/show','fullscreen close/inline resume','second fullscreen entry/exit']}))
     if process.returncode:
+        # Failed builds do not publish a release. Preserve a small visual
+        # diagnostic in the CI log as well as the full xcresult attachments.
+        import base64
+        pictures = sorted(attachments.rglob('*.png')) if result.exists() and attachments.exists() else []
+        for index, picture in enumerate(pictures[-2:]):
+            thumbnail = pathlib.Path('/tmp/native-ui-failure-'+str(index)+'.jpg')
+            converted = subprocess.run(['sips','-s','format','jpeg','-s','formatOptions','65','-Z','874',str(picture),'--out',str(thumbnail)], capture_output=True)
+            if converted.returncode == 0:
+                encoded = base64.b64encode(thumbnail.read_bytes()).decode()
+                for offset in range(0,len(encoded),4000):
+                    print('NATIVE_UI_IMAGE',index,offset//4000,encoded[offset:offset+4000],flush=True)
         lines = log.read_text(errors='replace').splitlines()
         print('\n'.join(lines)[-30000:], flush=True)
         raise RuntimeError('Native AVKit UI interaction test failed; diagnostics saved in packages')
