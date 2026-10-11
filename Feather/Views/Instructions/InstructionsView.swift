@@ -9,13 +9,17 @@ final class InstructionPlayback: ObservableObject {
     @Published private(set) var player: AVPlayer?
     @Published private(set) var error: String?
     private var observation: NSKeyValueObservation?
+    private var resourceLoader: InstructionResourceLoader?
+    var transportDiagnostics: [String: Int] { resourceLoader?.diagnostics ?? [:] }
 
     func start(_ url: URL) {
         Self.active?.stop()
         stop()
         guard StoreInstruction.isTrusted(url) else { error = "Видео недоступно."; return }
         error = nil
-        let item = AVPlayerItem(url: url)
+        let loader = InstructionResourceLoader(url: url)
+        resourceLoader = loader
+        let item = AVPlayerItem(asset: loader.makeAsset())
         item.preferredForwardBufferDuration = 5
         let player = AVPlayer(playerItem: item)
         self.player = player
@@ -38,6 +42,8 @@ final class InstructionPlayback: ObservableObject {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
+        resourceLoader?.invalidate()
+        resourceLoader = nil
     }
 }
 

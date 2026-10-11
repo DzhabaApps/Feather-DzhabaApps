@@ -1,0 +1,30 @@
+import Foundation
+import AVFoundation
+
+@main
+struct InstructionTransportCheck {
+    static func main() async {
+        let url = URL(string: "https://github.com/DzhabaApps/Dzhaba-Apps/releases/download/dr-store-video-instructions/technical-playback-test.mp4")!
+        let loader = InstructionResourceLoader(url: url)
+        let asset = loader.makeAsset()
+        do {
+            let duration = try await asset.load(.duration)
+            let playable = try await asset.load(.isPlayable)
+            let tracks = try await asset.loadTracks(withMediaType: .video)
+            let metrics = loader.diagnostics
+            guard abs(duration.seconds - 45) < 1, playable, !tracks.isEmpty,
+                  (metrics["partialResponses"] ?? 0) > 0 else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            print("Native MP4 range transport passed: \(metrics)")
+            asset.cancelLoading()
+            loader.invalidate()
+        } catch {
+            let failure = error as NSError
+            print("Native MP4 range transport failed: \(failure.domain) \(failure.code); \(loader.diagnostics)")
+            asset.cancelLoading()
+            loader.invalidate()
+            exit(1)
+        }
+    }
+}

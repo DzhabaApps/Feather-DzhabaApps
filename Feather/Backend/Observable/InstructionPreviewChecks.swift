@@ -8,6 +8,7 @@ enum InstructionPreviewChecks {
         guard Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" else { return }
         var checks: [String: Bool] = [:]
         var detail = ""
+        var transport: [String: Int] = [:]
         let playback = InstructionPlayback()
         do {
             let encoded = try JSONEncoder().encode(InstructionIndex(schema_version: 1, instructions: [.sample]))
@@ -25,6 +26,8 @@ enum InstructionPreviewChecks {
             let firstFrame = await waitForFrame(player, item, output, after: 0.1)
             checks["github_native_first_frame"] = firstFrame
             checks["github_native_ready"] = item.status == .readyToPlay
+            transport = playback.transportDiagnostics
+            if !firstFrame { detail = "First frame: status=\(item.status.rawValue), error=\(item.error.map { String(describing: $0) } ?? "none")" }
             let second = InstructionPlayback()
             second.start(StoreInstruction.sample.video_url)
             checks["only_one_active_player"] = playback.player == nil && player.currentItem == nil
@@ -41,6 +44,7 @@ enum InstructionPreviewChecks {
             }
             let seekFrame = await waitForFrame(seekPlayer, seekItem, seekOutput, after: 30)
             checks["github_native_seek_frame"] = seekDone && seekFrame
+            if !seekFrame { detail += "; seek error=\(seekItem.error.map { String(describing: $0) } ?? "none")" }
             playback.pause()
             checks["pause_stops_playback"] = seekPlayer.rate == 0
             playback.stop()
@@ -51,6 +55,7 @@ enum InstructionPreviewChecks {
         playback.stop()
         let result: [String: Any] = ["checks": checks, "error": detail,
             "passed": detail.isEmpty && checks.count == 12 && checks.values.allSatisfy { $0 },
+            "transport": transport,
             "commit": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""]
         let url = URL.documentsDirectory.appendingPathComponent("instruction-validation.json")
         if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
