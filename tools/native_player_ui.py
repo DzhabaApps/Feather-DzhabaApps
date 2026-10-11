@@ -1,15 +1,22 @@
 """Run actual XCTest taps/drags on AVKit, with native screenshots and failure logs."""
 import json, pathlib, shutil, subprocess, zipfile
 
-def exercise_native_ui(root, device, derived, output):
+def prepare_native_ui(root):
     probe = subprocess.run(['ruby', '-r', 'xcodeproj', '-e', 'puts Xcodeproj::VERSION'], capture_output=True)
     if probe.returncode:
         subprocess.run(['gem', 'install', '--user-install', 'xcodeproj', '--no-document'], check=True)
     ruby = r'''
 require 'xcodeproj'
+# Xcode 26 allows synchronized resources here; xcodeproj 1.28 only lists
+# source/copy phases. Extend that single reference type without changing the
+# project's resource membership or disabling validation of other attributes.
+objects = Xcodeproj::Project::Object
+attribute = objects::PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet.attributes.find { |a| a.name == :build_phase }
+attribute.classes |= [objects::PBXResourcesBuildPhase]
 root = ARGV[0]
 project = Xcodeproj::Project.open(File.join(root, 'Feather.xcodeproj'))
 app = project.targets.find { |target| target.name == 'Feather' }
+exit 0 if project.targets.any? { |target| target.name == 'InstructionNativeUITests' }
 target = project.new_target(:ui_test_bundle, 'InstructionNativeUITests', :ios, '15.0')
 file = project.main_group.new_file(File.join(root, 'tools/native-player-ui/NativePlayerUITests.swift'))
 target.source_build_phase.add_file_reference(file)
@@ -29,6 +36,11 @@ scheme.save_as(project.path, 'InstructionNativeUI', true)
 project.save
 '''
     subprocess.run(['ruby', '-e', ruby, str(root)], check=True)
+    print('Native UI test project prepared and Xcode resource groups preserved.', flush=True)
+
+
+def exercise_native_ui(root, device, derived, output):
+    prepare_native_ui(root)
     result = pathlib.Path('/tmp/InstructionNativeUI.xcresult')
     log = output/'Native-UI-test.log'
     with log.open('w') as stream:
@@ -54,3 +66,6 @@ project.save
         print('\n'.join(lines)[-30000:], flush=True)
         raise RuntimeError('Native AVKit UI interaction test failed; diagnostics saved in packages')
     print('Native AVKit XCTest: fullscreen, system skip/scrub, hiding controls and repeated return passed.', flush=True)
+
+if __name__ == '__main__':
+    prepare_native_ui(pathlib.Path(__file__).resolve().parents[1])
