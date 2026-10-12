@@ -6,9 +6,12 @@ BUILD_SETTINGS ?=
 TMP := $(TMPDIR)/$(NAME)
 CERT_JSON_URL := https://backloop.dev/pack.json
 
-.PHONY: all clean deps verify preview-screenshots $(PLATFORMS)
+.PHONY: all full clean deps verify preview-screenshots $(PLATFORMS)
 
-all: verify deps preview-screenshots $(PLATFORMS)
+all:
+	python3 tools/package_validated.py
+
+full: verify deps preview-screenshots $(PLATFORMS)
 
 verify:
 	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/AppIconSelection.swift tools/icon-tests/check.swift -o /tmp/dr-icon-selection-check
@@ -70,6 +73,7 @@ $(PLATFORMS): deps
 
 	mkdir -p _build/Payload
 	cp -R _build/Applications/*.app _build/Payload/Feather.app
+	python3 tools/finalize_app_metadata.py _build/Payload/Feather.app
 	chmod -R 0755 _build/Payload/Feather.app
 	codesign --force --sign - --timestamp=none _build/Payload/Feather.app
 	cp deps/* _build/Payload/Feather.app/ || true
