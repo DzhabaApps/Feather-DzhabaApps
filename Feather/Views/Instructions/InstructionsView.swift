@@ -10,7 +10,9 @@ final class InstructionPlayback: ObservableObject {
     @Published private(set) var error: String?
     private(set) var time = 0.0
     private(set) var duration = 0.0
-    var fullScreen = false
+    // The preview's accessibility diagnostics must also update while paused:
+    // a periodic playback callback may not fire after AVKit returns inline.
+    var fullScreen = false { didSet { updateDiagnostics() } }
     var fullScreenVisible = false
     var inlineVisible = false
     var controller: AVPlayerViewController?
