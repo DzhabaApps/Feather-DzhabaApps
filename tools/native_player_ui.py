@@ -73,8 +73,8 @@ def exercise_native_ui(root, device, derived, output):
     import plistlib
     commit = plistlib.loads(app_info.read_bytes())['CFBundleVersion']
     (output/'Native-UI-validation.json').write_text(json.dumps({'commit':commit,'passed':process.returncode==0,
-        'method':'XCTest actual icon changes and native AVKit button taps and timeline drag',
-        'scenarios':['all three icon selections and relaunch persistence','Russian icon confirmation','fullscreen entry','same item retained','native forward/back skip','native timeline drag/resume/progress',
+        'method':'XCTest actual native AVKit button taps and timeline drag',
+        'scenarios':['fullscreen entry','same item retained','native forward/back skip','native timeline drag/resume/progress',
                      'controls hide/show','fullscreen close/inline resume','second fullscreen entry/exit']}))
     if process.returncode:
         # Failed builds do not publish a release. Preserve a small visual

@@ -10,6 +10,7 @@ import NimbleViews
 
 // MARK: - View extension: Model
 extension AppIconView {
+	@MainActor
 	struct AltIcon: Identifiable {
 		var displayName: String
 		var author: String
@@ -32,11 +33,13 @@ extension AppIconView {
 }
 
 // MARK: - View
+@MainActor
 struct AppIconView: View {
 	@Environment(\.scenePhase) private var scenePhase
-	@State private var currentIcon: String? = UIApplication.shared.alternateIconName
-	@State private var changingIcon = false
-	@State private var showError = false
+	@StateObject private var selection = AppIconSelection(
+		readIcon: { UIApplication.shared.alternateIconName },
+		changeIcon: { key, completion in UIApplication.shared.setAlternateIconName(key, completionHandler: completion) }
+	)
 	
 	// dont translate
 	var sections: [String: [AltIcon]] = [
@@ -61,14 +64,12 @@ struct AppIconView: View {
 			}
 		}
 		.onAppear {
-			currentIcon = UIApplication.shared.alternateIconName
+			selection.refresh()
 		}
 		.onChange(of: scenePhase) { phase in
-			if phase == .active && !changingIcon {
-				currentIcon = UIApplication.shared.alternateIconName
-			}
+			if phase == .active { selection.refresh() }
 		}
-		.alert("Не удалось изменить значок", isPresented: $showError) {
+		.alert("Не удалось изменить значок", isPresented: $selection.showError) {
 			Button("Понятно", role: .cancel) {}
 		} message: {
 			Text("Попробуйте ещё раз. Если проблема повторится, обратитесь в поддержку.")
@@ -83,19 +84,7 @@ extension AppIconView {
 		icon: AppIconView.AltIcon
 	) -> some View {
 		Button {
-			guard !changingIcon, currentIcon != icon.key else { return }
-			changingIcon = true
-			UIApplication.shared.setAlternateIconName(icon.key) { error in
-				DispatchQueue.main.async {
-					changingIcon = false
-					if error == nil {
-						currentIcon = icon.key
-					} else {
-						currentIcon = UIApplication.shared.alternateIconName
-						showError = true
-					}
-				}
-			}
+			selection.select(icon.key)
 		} label: {
 			HStack(spacing: 18) {
 				Image(uiImage: icon.image)
@@ -107,14 +96,14 @@ extension AppIconView {
 					linelimit: 0
 				)
 				
-				if currentIcon == icon.key {
+				if selection.currentIcon == icon.key {
 					Image(systemName: "checkmark").bold()
 						.accessibilityHidden(true)
 				}
 			}
 		}
-		.disabled(changingIcon)
+		.disabled(selection.isChanging)
 		.accessibilityIdentifier("app-icon-" + (icon.key ?? "primary"))
-		.accessibilityValue(currentIcon == icon.key ? "Выбран" : "Не выбран")
+		.accessibilityValue(selection.currentIcon == icon.key ? "Выбран" : "Не выбран")
 	}
 }

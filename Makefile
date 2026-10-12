@@ -11,6 +11,8 @@ CERT_JSON_URL := https://backloop.dev/pack.json
 all: verify deps preview-screenshots $(PLATFORMS)
 
 verify:
+	xcrun swiftc -parse-as-library Feather/Backend/Observable/AppIconSelection.swift tools/icon-tests/check.swift -o /tmp/dr-icon-selection-check
+	/tmp/dr-icon-selection-check
 	python3 tools/native_player_ui.py --prepare
 	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/InstructionResourceLoader.swift tools/instruction-tests/check.swift -o /tmp/dr-instruction-transport-check
 	/tmp/dr-instruction-transport-check

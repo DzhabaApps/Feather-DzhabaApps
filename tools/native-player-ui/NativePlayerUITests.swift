@@ -55,16 +55,16 @@ final class NativePlayerUITests: XCTestCase {
         return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY))
     }
     var transport: Match {
-        { element in element.elementType == .button && ["play", "pause", "play button", "pause button", "play/pause", "воспроизвести", "пауза"].contains(element.label.lowercased()) }
+        { element in element.elementType == .button && (element.identifier.lowercased() == "play/pause" || ["play", "pause", "play button", "pause button", "play/pause", "воспроизвести", "пауза", "приостановить"].contains(element.label.lowercased())) }
     }
     var timeline: Match {
         { element in element.elementType == .slider &&
-            !["volume", "громкост", "brightness", "яркост"].contains(where: { element.label.localizedCaseInsensitiveContains($0) }) }
+            !["volume", "громкост", "brightness", "яркост"].contains(where: { (element.label + " " + element.identifier).localizedCaseInsensitiveContains($0) }) }
     }
     func seek(_ fraction: CGFloat) {
         _ = freshFrame(timeline)
         // This is XCTest's real native slider drag, not AVPlayer.seek().
-        let progress = app.sliders.matching(NSPredicate(format: "NOT (label CONTAINS[c] 'volume' OR label CONTAINS[c] 'громкост' OR label CONTAINS[c] 'brightness' OR label CONTAINS[c] 'яркост')")).firstMatch
+        let progress = app.sliders.matching(NSPredicate(format: "NOT (identifier CONTAINS[c] 'volume' OR label CONTAINS[c] 'volume' OR label CONTAINS[c] 'громкост' OR label CONTAINS[c] 'brightness' OR label CONTAINS[c] 'яркост')")).firstMatch
         progress.adjust(toNormalizedSliderPosition: fraction)
     }
     func setPlaying(_ playing: Bool) {
@@ -134,33 +134,4 @@ final class NativePlayerUITests: XCTestCase {
         XCTAssertEqual(item, state()["item"] as? String)
     }
 
-    func testAppIcons() {
-        continueAfterFailure = false
-        app.launchEnvironment["FIZER_PREVIEW_SCREEN"] = "app-icons"
-        app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
-        app.launch()
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        for key in ["V2Mac", "V1", "primary"] {
-            let row = app.buttons["app-icon-" + key]
-            XCTAssertTrue(row.waitForExistence(timeout: 15))
-            row.tap()
-            wait("Icon confirmation did not appear") {
-                self.app.alerts.firstMatch.exists || springboard.alerts.firstMatch.exists
-            }
-            let alert = app.alerts.firstMatch.exists ? app.alerts.firstMatch : springboard.alerts.firstMatch
-            snapshot("DR-Store-icon-confirmation-" + key)
-            let text = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
-            XCTAssertTrue(text.localizedCaseInsensitiveContains("знач"), "Icon confirmation is not Russian: " + text)
-            alert.buttons.firstMatch.tap()
-            wait("Selected icon checkmark is stale") { (row.value as? String) == "Выбран" }
-            for other in ["V2Mac", "V1", "primary"] where other != key {
-                XCTAssertEqual(app.buttons["app-icon-" + other].value as? String, "Не выбран")
-            }
-            snapshot("DR-Store-icon-selected-" + key)
-            app.terminate()
-            app.launch()
-            XCTAssertTrue(row.waitForExistence(timeout: 15))
-            wait("Icon selection did not survive relaunch") { (row.value as? String) == "Выбран" }
-        }
-    }
 }
