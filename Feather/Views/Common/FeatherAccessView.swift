@@ -12,25 +12,25 @@ struct FeatherAccessView: View {
                 .font(.system(size: 52)).foregroundStyle(.secondary)
             if waiting {
                 ProgressView()
-                Text("Проверяем доступ…").font(.title2.bold())
+                Text("Проверяем подписку…").font(.title2.bold())
             } else {
                 Text(title).font(.title2.bold()).multilineTextAlignment(.center)
                 Text(message).foregroundStyle(.secondary).multilineTextAlignment(.center)
             }
             if !waiting, let expiry = previewExpiry ?? access.expiresAt {
-                Text("Доступ до \(SubscriptionPresentation.expiry(expiry))")
+                Text("Подписка до \(SubscriptionPresentation.expiry(expiry))")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             if !waiting {
             if currentState == .expired {
-                Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+                Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
                     .buttonStyle(.borderedProminent)
             }
             Button { Task { await access.refresh(force: true) } } label: {
                 if access.isChecking { ProgressView() } else { Text(currentState == .expired ? "Проверить продление" : "Повторить проверку") }
             }.buttonStyle(.bordered).disabled(access.isChecking)
             if currentState != .expired {
-                Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+                Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
                     .buttonStyle(.bordered)
             }
             Link("Связаться с поддержкой", destination: URL(string: "https://t.me/dzhabaraduev")!)
@@ -41,14 +41,14 @@ struct FeatherAccessView: View {
     }
     private var title: String {
         switch currentState {
-        case .expired: return "Доступ закончился"
+        case .expired: return "Подписка истекла"
         case .disabled: return "Обратитесь в поддержку"
-        default: return "Не удалось проверить доступ"
+        default: return "Не удалось проверить подписку"
         }
     }
     private var message: String {
         switch currentState {
-        case .expired: return "Продлите доступ, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
+        case .expired: return "Продлите подписку, чтобы снова подписывать и устанавливать приложения. Ваша библиотека сохранена."
         case .disabled: return "Откройте актуальную ссылку в боте или обратитесь в поддержку."
         default: return "Для проверки подключитесь к интернету. Если связь не восстановилась, повторите попытку позже."
         }

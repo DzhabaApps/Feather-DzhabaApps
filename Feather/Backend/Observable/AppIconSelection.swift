@@ -9,28 +9,44 @@ final class AppIconSelection: ObservableObject {
     @Published var showError = false
     private let readIcon: () -> String?
     private let changeIcon: (String?, @escaping (Error?) -> Void) -> Void
+    private let defaults: UserDefaults
+    private let savedIconKey = "drStore.confirmedAppIcon"
 
-    init(readIcon: @escaping () -> String?, changeIcon: @escaping (String?, @escaping (Error?) -> Void) -> Void) {
+    init(readIcon: @escaping () -> String?, defaults: UserDefaults = .standard, changeIcon: @escaping (String?, @escaping (Error?) -> Void) -> Void) {
         self.readIcon = readIcon
+        self.defaults = defaults
         self.changeIcon = changeIcon
-        currentIcon = readIcon()
+        if let saved = defaults.string(forKey: savedIconKey) {
+            currentIcon = saved.isEmpty ? nil : saved
+        } else {
+            currentIcon = readIcon()
+        }
     }
 
     func refresh() {
-        if !isChanging { currentIcon = readIcon() }
+        guard !isChanging else { return }
+        // Some signed builds report nil even after a successful alternate-icon change.
+        // Preserve the last successful request, including an explicit primary selection.
+        if let saved = defaults.string(forKey: savedIconKey) {
+            currentIcon = saved.isEmpty ? nil : saved
+        } else {
+            currentIcon = readIcon()
+        }
     }
 
     func select(_ key: String?) {
-        guard !isChanging, key != currentIcon else { return }
+        // Always allow a reset to primary, even when UIKit's stale value is nil.
+        guard !isChanging else { return }
+        showError = false
         isChanging = true
         changeIcon(key) { [weak self] error in
             Task { @MainActor in
                 guard let self else { return }
                 self.isChanging = false
                 if error == nil {
+                    self.defaults.set(key ?? "", forKey: self.savedIconKey)
                     self.currentIcon = key
                 } else {
-                    self.currentIcon = self.readIcon()
                     self.showError = true
                 }
             }

@@ -9,8 +9,8 @@ struct SettingsView: View {
 	var previewExpiry: Date? = nil
 	private var subscriptionStatus: String {
 		switch previewState ?? access.state {
-		case .active: return "Активен"
-		case .expired: return "Закончился"
+		case .active: return "Активна"
+		case .expired: return "Истекла"
 		case .disabled: return "Обратитесь в поддержку"
 		case .verificationRequired: return "Нужна проверка через интернет"
 		}
@@ -19,12 +19,12 @@ struct SettingsView: View {
 	var body: some View {
 		NBNavigationView(.localized("Settings")) {
 			Form {
-				NBSection("Мой DR Store") {
+				NBSection("Моя подписка") {
 					LabeledContent("Статус", value: subscriptionStatus)
 					if let expiry = previewExpiry ?? access.expiresAt {
 						LabeledContent("Действует до", value: SubscriptionPresentation.expiry(expiry))
 					}
-					Link("Продлить доступ", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
+					Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
 					Link("Поддержка", destination: URL(string: "https://t.me/dzhabaraduev")!)
 				}
 				SSLUpdateSection()
@@ -154,7 +154,7 @@ struct FizerHelpView: View {
 				Button(.localized("Contact support"), systemImage: "message") { UIApplication.open("https://t.me/dzhabaraduev") }
 			}
 			NBSection(.localized("Installation is stuck")) { Text(.localized("Installation troubleshooting")) }
-			NBSection("Доступ и поддержка") { Text(.localized("Certificate troubleshooting")) }
+			NBSection("Подписка и поддержка") { Text(.localized("Certificate troubleshooting")) }
 			NBSection(.localized("Install from repository")) { Text(.localized("Repository installation explanation")) }
 		}
 	}
