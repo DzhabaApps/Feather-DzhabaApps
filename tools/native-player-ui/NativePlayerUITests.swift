@@ -2,6 +2,7 @@ import XCTest
 
 final class NativePlayerUITests: XCTestCase {
     let app = XCUIApplication(bundleIdentifier: "ru.dzhabaapps.fizer.preview")
+    var appBounds = CGRect.zero
     typealias Match = (XCUIElementSnapshot) -> Bool
     func find(_ snapshot: XCUIElementSnapshot, _ match: Match) -> XCUIElementSnapshot? {
         if match(snapshot) { return snapshot }
@@ -10,6 +11,7 @@ final class NativePlayerUITests: XCTestCase {
     }
     func current(_ match: Match) -> XCUIElementSnapshot? {
         guard let snapshot = try? app.snapshot() else { return nil }
+        appBounds = snapshot.children.first(where: { $0.elementType == .window })?.frame ?? snapshot.frame
         return find(snapshot, match)
     }
     func state() -> [String: Any] {
@@ -52,7 +54,12 @@ final class NativePlayerUITests: XCTestCase {
     }
     func freshControl(_ match: Match) -> XCUICoordinate {
         let frame = freshFrame(match)
-        return app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.midY))
+        // A chained coordinate asks XCTest to resolve the application several
+        // times during synthesis. Use one coordinate against the same snapshot
+        // bounds so the tap arrives while AVKit's transient controls are visible.
+        return app.coordinate(withNormalizedOffset: CGVector(
+            dx: (frame.midX - appBounds.minX) / appBounds.width,
+            dy: (frame.midY - appBounds.minY) / appBounds.height))
     }
     var transport: Match {
         { element in element.elementType == .button && (element.identifier.lowercased() == "play/pause" || ["play", "pause", "play button", "pause button", "play/pause", "воспроизвести", "пауза", "приостановить"].contains(element.label.lowercased())) }
