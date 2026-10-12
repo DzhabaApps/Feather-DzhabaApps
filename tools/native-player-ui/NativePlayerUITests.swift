@@ -90,6 +90,10 @@ final class NativePlayerUITests: XCTestCase {
         wait("Remote video did not start") { (self.state()["rate"] as? Double ?? 0) > 0 }
         let item = state()["item"] as? String
         let expand = button(["Full Screen", "FullScreen", "полный экран", "весь экран", "на весь экран", "полноэкран", "развернуть"])
+        // On a busy simulator XCTest can take several seconds to synthesize
+        // a tap. Pause through AVKit first so Expand cannot auto-hide between
+        // the immutable snapshot and the real tap, just as for Close below.
+        setPlaying(false)
         freshControl(expand).tap()
         wait("Native fullscreen did not present") { self.state()["fullscreen"] as? Bool == true }
         XCTAssertEqual(item, state()["item"] as? String)
@@ -135,8 +139,10 @@ final class NativePlayerUITests: XCTestCase {
         wait("Returning inline stopped playback") { (self.state()["rate"] as? Double ?? 0) > 0 }
         snapshot("DR-Store-native-inline-return")
         // Re-enter/exit a second time to catch a released controller/item.
+        setPlaying(false)
         freshControl(expand).tap()
         wait("Second fullscreen failed") { self.state()["fullscreen"] as? Bool == true }
+        setPlaying(true)
         XCTAssertEqual(item, state()["item"] as? String)
         returnInline(close)
         XCTAssertEqual(item, state()["item"] as? String)

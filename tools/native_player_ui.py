@@ -80,7 +80,9 @@ def exercise_native_ui(root, device, derived, output):
         # Failed builds do not publish a release. Preserve a small visual
         # diagnostic in the CI log as well as the full xcresult attachments.
         import base64
-        pictures = sorted(p for p in attachments.rglob('*') if p.suffix.lower() in {'.png','.jpg','.jpeg','.heic'}) if result.exists() and attachments.exists() else []
+        # xcresulttool also exports screenshot attachments under extensionless
+        # UUID names. Let sips identify those, retaining its failure guard.
+        pictures = sorted(p for p in attachments.rglob('*') if p.is_file() and p.suffix.lower() in {'','.png','.jpg','.jpeg','.heic'}) if result.exists() and attachments.exists() else []
         for index, picture in enumerate(pictures[-2:]):
             thumbnail = pathlib.Path('/tmp/native-ui-failure-'+str(index)+'.jpg')
             converted = subprocess.run(['sips','-s','format','jpeg','-s','formatOptions','65','-Z','874',str(picture),'--out',str(thumbnail)], capture_output=True)
