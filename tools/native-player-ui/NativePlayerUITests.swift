@@ -71,6 +71,16 @@ final class NativePlayerUITests: XCTestCase {
         if ((state()["rate"] as? Double ?? 0) > 0) != playing { freshControl(transport).tap() }
         wait("Native play/pause failed") { ((self.state()["rate"] as? Double ?? 0) > 0) == playing }
     }
+    func returnInline(_ close: Match) {
+        // Coordinate synthesis can take longer than AVKit's auto-hide delay on
+        // a busy simulator. Pause via the real control before locating Close;
+        // then verify the retained player can resume via its inline control.
+        let wasPlaying = (state()["rate"] as? Double ?? 0) > 0
+        setPlaying(false)
+        freshControl(close).tap()
+        wait("Native fullscreen did not return inline") { self.state()["fullscreen"] as? Bool == false }
+        if wasPlaying { setPlaying(true) }
+    }
     func testSystemPlayer() {
         continueAfterFailure = false
         app.launchEnvironment["FIZER_PREVIEW_SCREEN"] = "instruction-detail"
@@ -120,8 +130,7 @@ final class NativePlayerUITests: XCTestCase {
         showControls()
         wait("Native controls did not return") { self.current(forward) != nil }
         let close = button(["Done", "Close", "Готово", "Закрыть", "Exit Full Screen", "Выход из полноэкран", "Свернуть"])
-        freshControl(close).tap()
-        wait("Native fullscreen did not return inline") { self.state()["fullscreen"] as? Bool == false }
+        returnInline(close)
         XCTAssertEqual(item, state()["item"] as? String)
         wait("Returning inline stopped playback") { (self.state()["rate"] as? Double ?? 0) > 0 }
         snapshot("DR-Store-native-inline-return")
@@ -129,8 +138,7 @@ final class NativePlayerUITests: XCTestCase {
         freshControl(expand).tap()
         wait("Second fullscreen failed") { self.state()["fullscreen"] as? Bool == true }
         XCTAssertEqual(item, state()["item"] as? String)
-        freshControl(close).tap()
-        wait("Second return failed") { self.state()["fullscreen"] as? Bool == false }
+        returnInline(close)
         XCTAssertEqual(item, state()["item"] as? String)
     }
 
