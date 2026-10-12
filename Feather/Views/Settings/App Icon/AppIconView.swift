@@ -33,7 +33,10 @@ extension AppIconView {
 
 // MARK: - View
 struct AppIconView: View {
-	@Binding var currentIcon: String?
+	@Environment(\.scenePhase) private var scenePhase
+	@State private var currentIcon: String? = UIApplication.shared.alternateIconName
+	@State private var changingIcon = false
+	@State private var showError = false
 	
 	// dont translate
 	var sections: [String: [AltIcon]] = [
@@ -60,6 +63,16 @@ struct AppIconView: View {
 		.onAppear {
 			currentIcon = UIApplication.shared.alternateIconName
 		}
+		.onChange(of: scenePhase) { phase in
+			if phase == .active && !changingIcon {
+				currentIcon = UIApplication.shared.alternateIconName
+			}
+		}
+		.alert("Не удалось изменить значок", isPresented: $showError) {
+			Button("Понятно", role: .cancel) {}
+		} message: {
+			Text("Попробуйте ещё раз. Если проблема повторится, обратитесь в поддержку.")
+		}
 	}
 }
 
@@ -70,8 +83,18 @@ extension AppIconView {
 		icon: AppIconView.AltIcon
 	) -> some View {
 		Button {
-			UIApplication.shared.setAlternateIconName(icon.key) { _ in
-				currentIcon = UIApplication.shared.alternateIconName
+			guard !changingIcon, currentIcon != icon.key else { return }
+			changingIcon = true
+			UIApplication.shared.setAlternateIconName(icon.key) { error in
+				DispatchQueue.main.async {
+					changingIcon = false
+					if error == nil {
+						currentIcon = icon.key
+					} else {
+						currentIcon = UIApplication.shared.alternateIconName
+						showError = true
+					}
+				}
 			}
 		} label: {
 			HStack(spacing: 18) {
@@ -86,8 +109,12 @@ extension AppIconView {
 				
 				if currentIcon == icon.key {
 					Image(systemName: "checkmark").bold()
+						.accessibilityHidden(true)
 				}
 			}
 		}
+		.disabled(changingIcon)
+		.accessibilityIdentifier("app-icon-" + (icon.key ?? "primary"))
+		.accessibilityValue(currentIcon == icon.key ? "Выбран" : "Не выбран")
 	}
 }

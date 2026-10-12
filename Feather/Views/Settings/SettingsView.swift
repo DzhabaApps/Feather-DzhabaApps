@@ -65,12 +65,11 @@ struct InstallationPreferencesView: View {
 }
 
 struct AdvancedSettingsView: View {
-    @State private var currentIcon: String? = UIApplication.shared.alternateIconName
     var body: some View {
         NBList("Оформление") {
             Section {
                 NavigationLink(destination: AppearanceView()) { Label(.localized("Appearance"), systemImage: "paintbrush") }
-                NavigationLink(destination: AppIconView(currentIcon: $currentIcon)) { Label(.localized("App Icon"), systemImage: "app.badge") }
+                NavigationLink(destination: AppIconView()) { Label(.localized("App Icon"), systemImage: "app.badge") }
             }
         }
     }

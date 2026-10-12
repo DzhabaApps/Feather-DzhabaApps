@@ -37,6 +37,8 @@ if args.ipa:
         info = plistlib.loads(ipa.read(app+'Info.plist'))
         assert info['CFBundleIdentifier'] == 'ru.dzhabaapps.fizer.preview'
         assert info['CFBundleDisplayName'] == 'DR Store Test'
+        assert info['CFBundleDevelopmentRegion'] == 'ru'
+        assert 'ru' in info['CFBundleLocalizations']
         schemes = [s for t in info.get('CFBundleURLTypes', []) for s in t.get('CFBundleURLSchemes', [])]
         assert 'fizer-preview' in schemes and 'feather' not in schemes
         assert any(n.startswith(app+'ru.lproj/') for n in ipa.namelist())

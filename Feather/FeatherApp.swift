@@ -95,7 +95,7 @@ struct FeatherApp: App {
 		case "instruction-detail": NavigationStack { ScrollView { InstructionVideoCard(instruction: .sample).padding() }.navigationTitle("Инструкция").navigationBarTitleDisplayMode(.inline) }
 		case "instruction-check": InstructionPlaybackPreviewView()
 		case "about": AboutView()
-		case "app-icons": AppIconView(currentIcon: .constant(nil))
+		case "app-icons": AppIconView()
 		case "access-expired": FeatherAccessView(access: access, previewState: .expired, previewExpiry: Date(timeIntervalSince1970: 1799272800))
 		case "access-offline": FeatherAccessView(access: access, previewState: .verificationRequired)
         case "access-checking": FeatherAccessView(access: access)

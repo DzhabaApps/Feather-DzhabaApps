@@ -133,4 +133,34 @@ final class NativePlayerUITests: XCTestCase {
         wait("Second return failed") { self.state()["fullscreen"] as? Bool == false }
         XCTAssertEqual(item, state()["item"] as? String)
     }
+
+    func testAppIcons() {
+        continueAfterFailure = false
+        app.launchEnvironment["FIZER_PREVIEW_SCREEN"] = "app-icons"
+        app.launchArguments = ["-AppleLanguages", "(ru)", "-AppleLocale", "ru_RU"]
+        app.launch()
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for key in ["V2Mac", "V1", "primary"] {
+            let row = app.buttons["app-icon-" + key]
+            XCTAssertTrue(row.waitForExistence(timeout: 15))
+            row.tap()
+            wait("Icon confirmation did not appear") {
+                self.app.alerts.firstMatch.exists || springboard.alerts.firstMatch.exists
+            }
+            let alert = app.alerts.firstMatch.exists ? app.alerts.firstMatch : springboard.alerts.firstMatch
+            snapshot("DR-Store-icon-confirmation-" + key)
+            let text = alert.staticTexts.allElementsBoundByIndex.map(\.label).joined(separator: " ")
+            XCTAssertTrue(text.localizedCaseInsensitiveContains("знач"), "Icon confirmation is not Russian: " + text)
+            alert.buttons.firstMatch.tap()
+            wait("Selected icon checkmark is stale") { (row.value as? String) == "Выбран" }
+            for other in ["V2Mac", "V1", "primary"] where other != key {
+                XCTAssertEqual(app.buttons["app-icon-" + other].value as? String, "Не выбран")
+            }
+            snapshot("DR-Store-icon-selected-" + key)
+            app.terminate()
+            app.launch()
+            XCTAssertTrue(row.waitForExistence(timeout: 15))
+            wait("Icon selection did not survive relaunch") { (row.value as? String) == "Выбран" }
+        }
+    }
 }
