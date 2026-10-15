@@ -156,12 +156,13 @@ struct InstallPreviewView: View {
                 Button {
                     _isWebviewPresenting = true
                 } label: {
-                    NBButton("Открыть страницу установки", systemImage: "", style: .text)
+                    NBButton("Открыть через Safari", systemImage: "", style: .text)
                 }
                 .padding()
+                .padding(.top, 112)
             }
 		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canOpenRelayPage ? .center : .bottomTrailing)
 		.animation(.easeInOut(duration: 0.3), value: viewModel.isCompleted)
 	}
 	
