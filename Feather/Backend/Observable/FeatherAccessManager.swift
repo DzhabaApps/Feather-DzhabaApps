@@ -94,6 +94,13 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
 
     func permitsAccess() -> Bool { (try? requireAccess()) != nil }
 
+    func relayAuthorization() throws -> InstallRelayAuthorization {
+        try requireAccess()
+        guard let configuration, let identity = installationIdentity() else { throw FeatherAccessError.unavailable }
+        return InstallRelayAuthorization(accessID: configuration.access_id,
+            credential: configuration.credential, installationID: identity)
+    }
+
     private func publish() {
         let current = snapshot()
         DispatchQueue.main.async { [weak self] in

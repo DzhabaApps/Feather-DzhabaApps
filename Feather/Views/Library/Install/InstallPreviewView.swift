@@ -19,6 +19,12 @@ struct InstallPreviewView: View {
 	@AppStorage("Feather.serverMethod") private var _serverMethod: Int = 0
 	@State private var _isWebviewPresenting = false
 	@State private var progressTask: Task<Void, Never>?
+    @State private var relayTask: Task<Void, Never>?
+    @State private var relayText: String?
+    @State private var relayJob: InstallRelayJob?
+    @State private var relayHandedOff = false
+    private let relayClient = InstallRelayClient()
+    private var usesRelay: Bool { InstallRelayClient.enabled && _installationMethod == 0 && _serverMethod == 2 && !isSharing }
 	
 	var app: AppInfoPresentable
 	@StateObject var viewModel: InstallerStatusViewModel
@@ -29,9 +35,14 @@ struct InstallPreviewView: View {
 	init(app: AppInfoPresentable, isSharing: Bool = false) {
 		self.app = app
 		self.isSharing = isSharing
-		let viewModel = InstallerStatusViewModel(isIdevice: UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1)
+        if InstallRelayClient.enabled && !UserDefaults.standard.bool(forKey: "DRStore.relayDefaultV1") {
+            UserDefaults.standard.set(2, forKey: "Feather.serverMethod")
+            UserDefaults.standard.set(true, forKey: "DRStore.relayDefaultV1")
+        }
+        let remote = InstallRelayClient.enabled && !isSharing && UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 0 && UserDefaults.standard.integer(forKey: "Feather.serverMethod") == 2
+		let viewModel = InstallerStatusViewModel(isIdevice: remote || UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1)
 		self._viewModel = StateObject(wrappedValue: viewModel)
-		self._installer = StateObject(wrappedValue: try! ServerInstaller(app: app, viewModel: viewModel))
+		self._installer = StateObject(wrappedValue: try! ServerInstaller(app: app, viewModel: viewModel, startLocal: !remote && !isSharing))
 	}
 	
 	// MARK: Body
@@ -54,12 +65,15 @@ struct InstallPreviewView: View {
 		.cornerRadius(cornerRadius)
 		.padding()
 		.sheet(isPresented: $_isWebviewPresenting) {
-			SafariRepresentableView(url: installer.pageEndpoint).ignoresSafeArea()
+			SafariRepresentableView(url: usesRelay ? (relayJob?.page_url ?? installer.pageEndpoint) : installer.pageEndpoint).ignoresSafeArea()
 		}
 		.onReceive(viewModel.$status) { newStatus in
 			if _installationMethod == 0 {
 				if case .ready = newStatus {
-					if _serverMethod == 0 {
+                    if usesRelay && relayJob != nil {
+                        relayHandedOff = true
+                        _isWebviewPresenting = true
+                    } else if _serverMethod == 0 {
 						UIApplication.shared.open(URL(string: installer.iTunesLink)!)
 					} else if _serverMethod == 1 {
 						_isWebviewPresenting = true
@@ -70,7 +84,7 @@ struct InstallPreviewView: View {
 					_isWebviewPresenting = false
 				}
 				
-				if case .installing = newStatus {
+				if case .installing = newStatus, !usesRelay {
 					if progressTask == nil {
 						progressTask = startInstallProgressPolling(
 							bundleID: app.identifier!,
@@ -100,6 +114,9 @@ struct InstallPreviewView: View {
 		#endif
 		
 		.onDisappear {
+            relayTask?.cancel()
+            relayTask = nil
+            if usesRelay && !relayHandedOff { Task { await relayClient.cancel() } }
 			progressTask?.cancel()
 			progressTask = nil
 			
@@ -111,7 +128,7 @@ struct InstallPreviewView: View {
 	
 	@ViewBuilder
 	private func _status() -> some View {
-		Label(viewModel.statusLabel, systemImage: viewModel.statusImage)
+		Label(relayText ?? viewModel.statusLabel, systemImage: viewModel.statusImage)
 			.padding()
 			.labelStyle(.titleAndIcon)
 			.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -144,6 +161,11 @@ struct InstallPreviewView: View {
 			)
 			return
 		}
+
+        if usesRelay {
+            installThroughRelay()
+            return
+        }
 				
 		Task.detached {
 			do {
@@ -206,6 +228,58 @@ struct InstallPreviewView: View {
 			}
 		}
 	}
+
+    private func installThroughRelay() {
+        guard relayTask == nil else { return }
+        relayTask = Task { @MainActor in
+            let handler = ArchiveHandler(app: app, viewModel: viewModel)
+            defer { handler.cleanupRelayWork() }
+            do {
+                let authorization = try FeatherAccessManager.shared.relayAuthorization()
+                relayText = "Подготавливаем приложение"
+                try await handler.move()
+                let package = try await handler.archive()
+                try Task.checkCancellation()
+                relayText = "Передаём приложение для установки"
+                viewModel.status = .sendingPayload
+                let job = try await relayClient.prepare(package: package, bundleID: app.identifier ?? "",
+                    version: app.version ?? "1", title: app.name ?? "Приложение", authorization: authorization) { progress in
+                    Task { @MainActor in viewModel.uploadProgress = progress }
+                }
+                handler.cleanupRelayWork()
+                try Task.checkCancellation()
+                relayJob = job
+                relayText = "Подтвердите установку"
+                viewModel.status = .ready
+                let deadline = Date().addingTimeInterval(1200)
+                while !Task.isCancelled && Date() < deadline {
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    let state: InstallRelayStatus
+                    do { state = try await relayClient.status(job) }
+                    catch { continue } // A temporary status timeout must not cancel iOS downloading.
+                    if state.state == "consumed" {
+                        _isWebviewPresenting = false
+                        relayText = "Файл передан iPhone"
+                        viewModel.installProgress = 1
+                        // This marks file transfer completion, not proof that iOS launched the app.
+                        viewModel.status = .completed(.success(()))
+                        return
+                    }
+                    if ["failed", "expired", "cancelled"].contains(state.state) { throw InstallRelayError.expired }
+                    if state.downloaded_bytes > 0 {
+                        relayText = "iPhone скачивает приложение"
+                        viewModel.installProgress = min(1, Double(state.downloaded_bytes) / Double(max(1,state.size)))
+                    }
+                }
+                if !Task.isCancelled { throw InstallRelayError.expired }
+            } catch is CancellationError {
+                if !relayHandedOff { await relayClient.cancel() }
+            } catch {
+                relayText = error.localizedDescription
+                viewModel.status = .broken(error)
+            }
+        }
+    }
 	
 	private func startInstallProgressPolling(
 		bundleID: String,

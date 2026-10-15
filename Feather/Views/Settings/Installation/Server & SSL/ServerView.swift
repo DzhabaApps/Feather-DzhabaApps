@@ -50,7 +50,7 @@ extension ServerView {
 struct ServerView: View {
 	@AppStorage("Feather.ipFix") private var _ipFix: Bool = false
 	@AppStorage("Feather.serverMethod") private var _serverMethod: Int = 0
-	private let _serverMethods: [String] = [.localized("Fully Local"), .localized("Semi Local")]
+	private var _serverMethods: [String] { InstallRelayClient.enabled ? [.localized("Fully Local"), .localized("Semi Local"), "Через DR Store"] : [.localized("Fully Local"), .localized("Semi Local")] }
 	
 	
 	// MARK: Body

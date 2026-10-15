@@ -14,6 +14,8 @@ all:
 full: verify deps preview-screenshots $(PLATFORMS)
 
 verify:
+	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/InstallRelayClient.swift tools/relay-tests/check.swift -o /tmp/dr-relay-check
+	/tmp/dr-relay-check
 	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/AppIconSelection.swift tools/icon-tests/check.swift -o /tmp/dr-icon-selection-check
 	/tmp/dr-icon-selection-check
 	python3 tools/native_player_ui.py --prepare
@@ -25,7 +27,7 @@ verify:
 	python3 tools/test_promote.py
 	xcrun swiftc Feather/Backend/Observable/CatalogCategory.swift tools/catalog-tests/main.swift -o /tmp/feather-catalog-tests
 	/tmp/feather-catalog-tests
-	xcrun swiftc Feather/Backend/Observable/FeatherAccessLease.swift Feather/Backend/Observable/FeatherAccessManager.swift tools/access-tests/main.swift -o /tmp/feather-access-tests
+	xcrun swiftc Feather/Backend/Observable/InstallRelayClient.swift Feather/Backend/Observable/FeatherAccessLease.swift Feather/Backend/Observable/FeatherAccessManager.swift tools/access-tests/main.swift -o /tmp/feather-access-tests
 	/tmp/feather-access-tests
 	xcrun swiftc Feather/Backend/Observable/RepositoryFileIdentity.swift Feather/Backend/Observable/DownloadPresentation.swift tools/identity-tests/main.swift -o /tmp/fizer-identity-tests
 	/tmp/fizer-identity-tests

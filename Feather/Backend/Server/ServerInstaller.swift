@@ -25,13 +25,15 @@ class ServerInstaller: Identifiable, ObservableObject {
 	@ObservedObject var viewModel: InstallerStatusViewModel
 	private var _server: Application?
 
-	init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel) throws {
+	init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel, startLocal: Bool = true) throws {
 		self.app = app
 		self.viewModel = viewModel
-		try _setup()
-		try _configureRoutes()
-		try _server?.server.start()
-		_needsShutdown = true
+		if startLocal {
+			try _setup()
+			try _configureRoutes()
+			try _server?.server.start()
+			_needsShutdown = true
+		}
 	}
 	
 	deinit {

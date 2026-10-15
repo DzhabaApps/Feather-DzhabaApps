@@ -90,4 +90,11 @@ final class ArchiveHandler: NSObject {
 	static func getCompressionLevel() -> Int {
 		UserDefaults.standard.integer(forKey: "Feather.compressionLevel")
 	}
+
+    func cleanupRelayWork() {
+        // Only this handler's UUID workspace; signed apps and exports stay in Documents.
+        guard _uniqueWorkDir.lastPathComponent == "FeatherInstall_\(_uuid)",
+              _uniqueWorkDir.deletingLastPathComponent().standardizedFileURL == _fileManager.temporaryDirectory.standardizedFileURL else { return }
+        try? _fileManager.removeItem(at: _uniqueWorkDir)
+    }
 }
