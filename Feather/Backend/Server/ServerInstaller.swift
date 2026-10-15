@@ -1,6 +1,7 @@
 import Foundation
 import Vapor
 import SwiftUI
+import IDeviceSwift
 
 final class ServerInstaller: ObservableObject {
     let id = UUID()
