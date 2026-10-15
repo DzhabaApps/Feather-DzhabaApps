@@ -26,8 +26,10 @@ struct InstallPreviewView: View {
     @State private var relayHandedOff = false
     private let relayClient = InstallRelayClient()
     private var usesRelay: Bool { InstallRelayClient.enabled && _installationMethod == 0 && _serverMethod == 2 && !isSharing }
-    private var canOpenRelayPage: Bool {
-        if case .ready = viewModel.status { return usesRelay && relayJob != nil }
+    private var canOpenInstallationPage: Bool {
+        if case .ready = viewModel.status {
+            return (usesRelay && relayJob != nil) || InstallRelayClient.semiLocalLabEnabled
+        }
         return false
     }
 	
@@ -71,7 +73,7 @@ struct InstallPreviewView: View {
 		
 		ZStack {
 			InstallProgressView(app: app, viewModel: viewModel)
-                .offset(y: canOpenRelayPage ? -20 : 0)
+                .offset(y: canOpenInstallationPage ? -20 : 0)
 			_status()
 			_button()
 		}
@@ -91,7 +93,11 @@ struct InstallPreviewView: View {
                     } else if _serverMethod == 0 {
 						UIApplication.shared.open(URL(string: installer.iTunesLink)!)
 					} else if _serverMethod == 1 {
-						_isWebviewPresenting = true
+                        if InstallRelayClient.semiLocalLabEnabled {
+                            openSemiLocalInstallation()
+                        } else {
+                            _isWebviewPresenting = true
+                        }
 					}
 				}
 				
@@ -162,7 +168,7 @@ struct InstallPreviewView: View {
 				.padding()
 				.compatTransition()
 			}
-            else if canOpenRelayPage {
+            else if canOpenInstallationPage {
                 Button {
                     _isWebviewPresenting = true
                 } label: {
@@ -175,7 +181,7 @@ struct InstallPreviewView: View {
                 .padding(.top, 60)
             }
 		}
-		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canOpenRelayPage ? .center : .bottomTrailing)
+		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canOpenInstallationPage ? .center : .bottomTrailing)
 		.animation(.easeInOut(duration: 0.3), value: viewModel.isCompleted)
 	}
 	
@@ -303,6 +309,21 @@ struct InstallPreviewView: View {
         UIApplication.shared.open(url, options: [:]) { accepted in
             Task { @MainActor in
                 if !accepted { _isWebviewPresenting = true }
+            }
+        }
+    }
+
+    private func openSemiLocalInstallation() {
+        guard let url = URL(string: installer.iTunesLinkExternal),
+              url.scheme == "itms-services" else {
+            _isWebviewPresenting = true
+            return
+        }
+        UIApplication.shared.open(url, options: [:]) { accepted in
+            Task { @MainActor in
+                if !accepted, case .ready = viewModel.status {
+                    _isWebviewPresenting = true
+                }
             }
         }
     }
