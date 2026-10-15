@@ -52,6 +52,9 @@ class ServerInstaller: Identifiable, ObservableObject {
 		_server?.get("*") { [weak self] req in
 			guard let self else { return Response(status: .badGateway) }
 			guard FeatherAccessManager.shared.permitsAccess() else { return Response(status: .forbidden) }
+			if InstallRelayClient.localTLSLabEnabled && req.url.path == "/dr-local-tls-check" {
+				return Response(status: .ok, body: .init(string: "dr-local-tls-ok"))
+			}
 			switch req.url.path {
 			case plistEndpoint.path:
 				self._updateStatus(.sendingManifest)

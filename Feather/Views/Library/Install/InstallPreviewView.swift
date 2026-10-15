@@ -199,6 +199,22 @@ struct InstallPreviewView: View {
 				if await !isSharing {
 					try FeatherAccessManager.shared.requireAccess()
 					if await _installationMethod == 0 {
+                        if InstallRelayClient.localTLSLabEnabled {
+                            // Use ordinary iOS trust: never accept a self-signed or revoked leaf.
+                            let url = await MainActor.run {
+                                URL(string: "https://\(installer.sni()):\(installer.port)/dr-local-tls-check")!
+                            }
+                            let configuration = URLSessionConfiguration.ephemeral
+                            configuration.timeoutIntervalForRequest = 10
+                            configuration.timeoutIntervalForResource = 15
+                            let session = URLSession(configuration: configuration)
+                            defer { session.invalidateAndCancel() }
+                            let (data, response) = try await session.data(from: url)
+                            guard (response as? HTTPURLResponse)?.statusCode == 200,
+                                  String(data: data, encoding: .utf8) == "dr-local-tls-ok" else {
+                                throw URLError(.badServerResponse)
+                            }
+                        }
 						await MainActor.run {
 							installer.packageUrl = packageUrl
 							viewModel.status = .ready
