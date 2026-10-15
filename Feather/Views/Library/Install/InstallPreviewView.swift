@@ -45,12 +45,16 @@ struct InstallPreviewView: View {
             self.__installationMethod = AppStorage(wrappedValue: 0, "DRStore.localTLSLab.installationMethod")
             self.__serverMethod = AppStorage(wrappedValue: 0, "DRStore.localTLSLab.serverMethod")
         }
+        if InstallRelayClient.semiLocalLabEnabled {
+            self.__installationMethod = AppStorage(wrappedValue: 0, "DRStore.semiLocalLab.installationMethod")
+            self.__serverMethod = AppStorage(wrappedValue: 1, "DRStore.semiLocalLab.serverMethod")
+        }
         if InstallRelayClient.enabled && !UserDefaults.standard.bool(forKey: "DRStore.relayDefaultV1") {
             UserDefaults.standard.set(2, forKey: "Feather.serverMethod")
             UserDefaults.standard.set(true, forKey: "DRStore.relayDefaultV1")
         }
         let remote = InstallRelayClient.enabled && !isSharing && UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 0 && UserDefaults.standard.integer(forKey: "Feather.serverMethod") == 2
-		let viewModel = InstallerStatusViewModel(isIdevice: !InstallRelayClient.localTLSLabEnabled && (remote || UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1))
+		let viewModel = InstallerStatusViewModel(isIdevice: !InstallRelayClient.localLabEnabled && (remote || UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1))
 		self._viewModel = StateObject(wrappedValue: viewModel)
 		self._installer = StateObject(wrappedValue: try! ServerInstaller(app: app, viewModel: viewModel, startLocal: !remote && !isSharing))
 	}
@@ -214,6 +218,26 @@ struct InstallPreviewView: View {
                             guard (response as? HTTPURLResponse)?.statusCode == 200,
                                   String(data: data, encoding: .utf8) == "dr-local-tls-ok" else {
                                 throw URLError(.badServerResponse)
+                            }
+                        }
+                        if InstallRelayClient.semiLocalLabEnabled {
+                            let expected = await installer.payloadEndpoint.absoluteString
+                            let link = await installer.externalServerLink
+                            guard let decoded = link.removingPercentEncoding, let url = URL(string: decoded) else {
+                                throw InstallRelayError.invalidResponse
+                            }
+                            let configuration = URLSessionConfiguration.ephemeral
+                            configuration.timeoutIntervalForRequest = 10
+                            configuration.timeoutIntervalForResource = 15
+                            let session = URLSession(configuration: configuration)
+                            defer { session.invalidateAndCancel() }
+                            let (data, response) = try await session.data(from: url)
+                            guard (response as? HTTPURLResponse)?.statusCode == 200,
+                                  let manifest = try PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any],
+                                  let items = manifest["items"] as? [[String: Any]], items.count == 1,
+                                  let assets = items[0]["assets"] as? [[String: Any]],
+                                  assets.first(where: { $0["kind"] as? String == "software-package" })?["url"] as? String == expected else {
+                                throw InstallRelayError.invalidResponse
                             }
                         }
 						await MainActor.run {

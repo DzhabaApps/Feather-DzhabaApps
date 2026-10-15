@@ -30,6 +30,12 @@ extension ServerInstaller {
 	}
 	
 	var pageEndpoint: URL {
+        if InstallRelayClient.semiLocalLabEnabled,
+           let decoded = externalServerLink.removingPercentEncoding,
+           var remote = URLComponents(string: decoded) {
+            remote.path = remote.path.replacingOccurrences(of: "/manifest.plist", with: "/install")
+            if let url = remote.url { return url }
+        }
 		var comps = URLComponents()
 		comps.scheme = self.getServerMethod() == 1 ? "http" : "https"
 		comps.host = sni()
@@ -39,6 +45,18 @@ extension ServerInstaller {
 	}
 	
 	var externalServerLink: String {
+        if InstallRelayClient.semiLocalLabEnabled {
+            // The private endpoint is injected only into the owner's test IPA.
+            // Failure must not silently switch this experiment to Palera or TLS.
+            guard let value = Bundle.main.object(forInfoDictionaryKey: "DRStoreSemiLocalLabEndpoint") as? String,
+                  let endpoint = URL(string: value),
+                  let url = try? InstallRelayClient.semiLocalManifestURL(endpoint: endpoint, id: id, port: port,
+                      bundleID: app.identifier ?? "", version: app.version ?? "1", title: app.name ?? "Приложение"),
+                  let encoded = url.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics) else {
+                return ""
+            }
+            return encoded
+        }
 		let baseUrl = "https://api.palera.in/genPlist?bundleid=\(app.identifier!)&name=\(app.name!)&version=\(app.version!)&fetchurl=\(self.payloadEndpoint.absoluteString)"
 		let encodedBaseUrl = baseUrl.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
 		let finalEncodedUrl = encodedBaseUrl.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
@@ -60,7 +78,7 @@ extension ServerInstaller {
 
 	var displayImageSmallEndpoint: URL {
 		var comps = URLComponents()
-		comps.scheme = "https"
+		comps.scheme = InstallRelayClient.semiLocalLabEnabled ? "http" : "https"
 		comps.host = sni()
 		comps.path = "/app57x57.png"
 		comps.port = port
@@ -69,7 +87,7 @@ extension ServerInstaller {
 
 	var displayImageLargeEndpoint: URL {
 		var comps = URLComponents()
-		comps.scheme = "https"
+		comps.scheme = InstallRelayClient.semiLocalLabEnabled ? "http" : "https"
 		comps.host = sni()
 		comps.path = "/app512x512.png"
 		comps.port = port

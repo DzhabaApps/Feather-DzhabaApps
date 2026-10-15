@@ -55,7 +55,26 @@ actor InstallRelayClient {
     static let endpoint = URL(string: "https://dzhabaapps.ru/api/install-relay")!
     // Set only in the owner's private diagnostic IPA, never in the public build.
     static var localTLSLabEnabled: Bool { Bundle.main.object(forInfoDictionaryKey: "DRStoreLocalTLSLab") as? Bool == true }
-    static var enabled: Bool { !localTLSLabEnabled && Bundle.main.object(forInfoDictionaryKey: "DRStoreInstallRelay") as? Bool == true }
+    static var semiLocalLabEnabled: Bool { Bundle.main.object(forInfoDictionaryKey: "DRStoreSemiLocalLab") as? Bool == true }
+    static var localLabEnabled: Bool { localTLSLabEnabled || semiLocalLabEnabled }
+    static var enabled: Bool { !localLabEnabled && Bundle.main.object(forInfoDictionaryKey: "DRStoreInstallRelay") as? Bool == true }
+
+    static func semiLocalManifestURL(endpoint: URL, id: UUID, port: Int,
+                                     bundleID: String, version: String, title: String) throws -> URL {
+        guard endpoint.scheme == "https", endpoint.host == "dzhabaapps.ru",
+              endpoint.port == nil, endpoint.user == nil, endpoint.password == nil,
+              endpoint.query == nil, endpoint.fragment == nil,
+              endpoint.path.hasPrefix("/api/install-relay/semi-local/"),
+              (4000...8000).contains(port), !bundleID.isEmpty, !version.isEmpty else {
+            throw InstallRelayError.invalidResponse
+        }
+        var parts = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
+        parts.queryItems = [URLQueryItem(name: "id", value: id.uuidString),
+            URLQueryItem(name: "port", value: String(port)), URLQueryItem(name: "bundle", value: bundleID),
+            URLQueryItem(name: "version", value: version), URLQueryItem(name: "title", value: title)]
+        guard let url = parts.url else { throw InstallRelayError.invalidResponse }
+        return url
+    }
     private let endpoint: URL
     private let session: URLSession
     private var currentJob: InstallRelayJob?

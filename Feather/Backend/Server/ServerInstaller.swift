@@ -41,7 +41,7 @@ class ServerInstaller: Identifiable, ObservableObject {
 	}
 	
 	private func _setup() throws {
-		if InstallRelayClient.localTLSLabEnabled {
+		if InstallRelayClient.localLabEnabled {
 			self._server = try setupApp(port: port)
 		} else {
 			self._server = try? setupApp(port: port)
@@ -112,11 +112,13 @@ class ServerInstaller: Identifiable, ObservableObject {
 	}
 		
 	func getServerMethod() -> Int {
+		if InstallRelayClient.semiLocalLabEnabled { return 1 }
 		if InstallRelayClient.localTLSLabEnabled { return 0 }
 		return UserDefaults.standard.integer(forKey: "Feather.serverMethod")
 	}
 	
 	func getIPFix() -> Bool {
-		UserDefaults.standard.bool(forKey: "Feather.ipFix")
+		if InstallRelayClient.semiLocalLabEnabled { return true }
+		return UserDefaults.standard.bool(forKey: "Feather.ipFix")
 	}
 }

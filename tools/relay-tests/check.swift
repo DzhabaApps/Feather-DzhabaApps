@@ -32,6 +32,19 @@ final class Stub: URLProtocol, @unchecked Sendable {
 
 @main struct Checks {
     static func main() async throws {
+        let endpoint = URL(string: "https://dzhabaapps.ru/api/install-relay/semi-local/fixture/manifest.plist")!
+        let title = "HD Rezka & тест + 2 / ? #"
+        let manifestURL = try InstallRelayClient.semiLocalManifestURL(endpoint: endpoint, id: UUID(), port: 4567,
+            bundleID: "fixture.app", version: "1.6.0", title: title)
+        let queries = URLComponents(url: manifestURL, resolvingAgainstBaseURL: false)!.queryItems!
+        assert(queries.count == 5 && queries.first(where: { $0.name == "title" })!.value == title)
+        let encoded = manifestURL.absoluteString.addingPercentEncoding(withAllowedCharacters: .alphanumerics)!
+        assert(encoded.removingPercentEncoding == manifestURL.absoluteString)
+        do {
+            _ = try InstallRelayClient.semiLocalManifestURL(endpoint: URL(string: "https://foreign.invalid/manifest")!,
+                id: UUID(), port: 4567, bundleID: "fixture.app", version: "1", title: title)
+            fatalError("Foreign semi-local endpoint accepted")
+        } catch InstallRelayError.invalidResponse {}
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at:file) }
         try Data(repeating:1,count:32).write(to:file)

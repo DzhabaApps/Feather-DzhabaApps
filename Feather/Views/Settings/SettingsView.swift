@@ -27,7 +27,7 @@ struct SettingsView: View {
 					Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
 					Link("Поддержка", destination: URL(string: "https://t.me/dzhabaraduev")!)
 				}
-				if !InstallRelayClient.enabled && !InstallRelayClient.localTLSLabEnabled { SSLUpdateSection() }
+				if !InstallRelayClient.enabled && !InstallRelayClient.localLabEnabled { SSLUpdateSection() }
 				Section {
 					NavigationLink(destination: InstallationPreferencesView()) {
 						Label(.localized("Installation"), systemImage: "arrow.down.circle")
