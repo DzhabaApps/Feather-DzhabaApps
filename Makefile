@@ -9,7 +9,7 @@ CERT_JSON_URL := https://backloop.dev/pack.json
 .PHONY: all full clean deps verify preview-screenshots $(PLATFORMS)
 
 all:
-	python3 tools/package_validated.py
+	python3 tools/package_local_tls_experiment_ci.py
 
 full: verify deps preview-screenshots $(PLATFORMS)
 

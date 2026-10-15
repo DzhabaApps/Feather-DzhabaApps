@@ -41,15 +41,16 @@ struct InstallPreviewView: View {
 		self.app = app
 		self.isSharing = isSharing
         if InstallRelayClient.localTLSLabEnabled {
-            UserDefaults.standard.set(0, forKey: "Feather.installationMethod")
-            UserDefaults.standard.set(0, forKey: "Feather.serverMethod")
+            // Keep ordinary installation preferences intact for rollback.
+            self.__installationMethod = AppStorage(wrappedValue: 0, "DRStore.localTLSLab.installationMethod")
+            self.__serverMethod = AppStorage(wrappedValue: 0, "DRStore.localTLSLab.serverMethod")
         }
         if InstallRelayClient.enabled && !UserDefaults.standard.bool(forKey: "DRStore.relayDefaultV1") {
             UserDefaults.standard.set(2, forKey: "Feather.serverMethod")
             UserDefaults.standard.set(true, forKey: "DRStore.relayDefaultV1")
         }
         let remote = InstallRelayClient.enabled && !isSharing && UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 0 && UserDefaults.standard.integer(forKey: "Feather.serverMethod") == 2
-		let viewModel = InstallerStatusViewModel(isIdevice: remote || UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1)
+		let viewModel = InstallerStatusViewModel(isIdevice: !InstallRelayClient.localTLSLabEnabled && (remote || UserDefaults.standard.integer(forKey: "Feather.installationMethod") == 1))
 		self._viewModel = StateObject(wrappedValue: viewModel)
 		self._installer = StateObject(wrappedValue: try! ServerInstaller(app: app, viewModel: viewModel, startLocal: !remote && !isSharing))
 	}
