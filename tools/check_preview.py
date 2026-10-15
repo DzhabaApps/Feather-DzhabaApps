@@ -44,7 +44,8 @@ if args.ipa:
         assert any(n.startswith(app+'ru.lproj/') for n in ipa.namelist())
         assert app+'GPL-3.0.txt' in ipa.namelist()
         assert not any('signing-assets/' in n for n in ipa.namelist()), 'Preview must not embed client credentials'
-        for name in ['server.crt', 'server.pem', 'commonName.txt']:
-            assert len(ipa.read(app+name)) > 0
+        for name in ['server.crt', 'server.pem', 'commonName.txt', 'dr-local-server.pem']:
+            assert app+name not in ipa.namelist(), 'Obsolete TLS material must not ship'
+        assert not any(key.startswith(('DRStoreLocalTLS', 'DRStoreSemiLocalLab', 'DRStoreInstallRelay')) for key in info)
         assert ipa.testzip() is None
-    print('IPA: isolation, Russian resources, SSL assets, license and archive integrity verified')
+    print('IPA: isolation, Russian resources, no experimental TLS/relay flags, license and integrity verified')

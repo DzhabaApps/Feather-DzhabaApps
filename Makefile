@@ -4,14 +4,13 @@ PLATFORMS := iphoneos
 BUILD_SETTINGS ?=
 
 TMP := $(TMPDIR)/$(NAME)
-CERT_JSON_URL := https://backloop.dev/pack.json
 
-.PHONY: all full clean deps verify preview-screenshots $(PLATFORMS)
+.PHONY: all full clean verify preview-screenshots $(PLATFORMS)
 
 all:
 	python3 tools/package_local_tls_experiment_ci.py
 
-full: verify deps preview-screenshots $(PLATFORMS)
+full: verify preview-screenshots $(PLATFORMS)
 
 verify:
 	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/InstallRelayClient.swift tools/relay-tests/check.swift -o /tmp/dr-relay-check
@@ -44,17 +43,7 @@ clean:
 	rm -rf packages
 	rm -rf Payload
 
-deps:
-	rm -rf deps || true
-	mkdir -p deps
-
-	curl -fsSL "$(CERT_JSON_URL)" -o cert.json
-	jq -r '.cert' cert.json > deps/server.crt
-	jq -r '.key1, .key2' cert.json > deps/server.pem
-	jq -r '.info.domains.commonName' cert.json > deps/commonName.txt
-
-
-$(PLATFORMS): deps
+$(PLATFORMS):
 	rm -rf _build
 
 	@if [ "$@" = "iphoneos" ]; then \
@@ -78,7 +67,6 @@ $(PLATFORMS): deps
 	python3 tools/finalize_app_metadata.py _build/Payload/Feather.app
 	chmod -R 0755 _build/Payload/Feather.app
 	codesign --force --sign - --timestamp=none _build/Payload/Feather.app
-	cp deps/* _build/Payload/Feather.app/ || true
 
 	mkdir -p packages
 

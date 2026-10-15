@@ -1,10 +1,10 @@
-"""Focused native checks for the isolated TLS experiment; never a public release."""
+"""Focused native regressions and compilation for the release candidate."""
 import json
 import os
 import pathlib
 import subprocess
 
-assert os.environ.get('GITHUB_REF') == 'refs/heads/codex/local-install-lab', 'Lab packaging is restricted to its own branch'
+assert os.environ.get('GITHUB_REF') == 'refs/heads/codex/semi-local-main', 'Candidate packaging is restricted to its own branch'
 subprocess.run(['make', 'verify', 'iphoneos'], check=True)
 root = pathlib.Path('packages')
 assert not list(pathlib.Path('Feather').rglob('dr-local-server.pem'))
@@ -14,5 +14,5 @@ report = {
     'ui_tests': 'not-run-isolated-backend-experiment', 'physical_ios_installation': 'pending',
     'tls_private_key_in_ci': False,
 }
-(root/'Local-TLS-validation.json').write_text(json.dumps(report, indent=2))
-print('Isolated TLS experiment: native model checks and iPhone compilation passed; real iOS installation pending.')
+(root/'Install-validation.json').write_text(json.dumps(report, indent=2))
+print('Release candidate: transport/storage regressions and iPhone compilation passed; physical acceptance pending.')

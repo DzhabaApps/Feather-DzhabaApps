@@ -3,6 +3,25 @@ import Foundation
 // Only directories created by our handlers belong to work cleanup. NSURLSession,
 // CFNetwork, image caches and third-party temporary files must be left alone.
 enum LocalAppFiles {
+    private static let installLock = NSLock()
+    private static var activeInstallWork = Set<String>()
+    static func registerInstallWork(_ directory: URL) {
+        installLock.lock(); activeInstallWork.insert(directory.standardizedFileURL.path); installLock.unlock()
+        sweepOldInstallWork()
+    }
+    static func unregisterInstallWork(_ directory: URL) {
+        installLock.lock(); activeInstallWork.remove(directory.standardizedFileURL.path); installLock.unlock()
+    }
+    static func sweepOldInstallWork(in root: URL = FileManager.default.temporaryDirectory, before: Date = Date().addingTimeInterval(-3600)) {
+        installLock.lock(); defer { installLock.unlock() }
+        for directory in (try? workDirectories(in: root)) ?? [] {
+            guard directory.lastPathComponent.hasPrefix("FeatherInstall_"),
+                  !activeInstallWork.contains(directory.standardizedFileURL.path),
+                  let values = try? directory.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let date = values.contentModificationDate, date < before else { continue }
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
     static func workDirectories(in root: URL = FileManager.default.temporaryDirectory) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]).filter { url in
             let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
@@ -17,7 +36,10 @@ enum LocalAppFiles {
     }
 
     static func clearWork(in root: URL = FileManager.default.temporaryDirectory) throws {
-        for directory in try workDirectories(in: root) { try FileManager.default.removeItem(at: directory) }
+        installLock.lock(); defer { installLock.unlock() }
+        for directory in try workDirectories(in: root) where !activeInstallWork.contains(directory.standardizedFileURL.path) {
+            try FileManager.default.removeItem(at: directory)
+        }
     }
 
     // Keep container roots, including orphaned app folders left after interrupted imports.

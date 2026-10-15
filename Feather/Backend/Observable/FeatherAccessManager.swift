@@ -94,10 +94,10 @@ final class FeatherAccessManager: ObservableObject, @unchecked Sendable {
 
     func permitsAccess() -> Bool { (try? requireAccess()) != nil }
 
-    func relayAuthorization() throws -> InstallRelayAuthorization {
+    func installAuthorization() throws -> InstallAuthorization {
         try requireAccess()
         guard let configuration, let identity = installationIdentity() else { throw FeatherAccessError.unavailable }
-        return InstallRelayAuthorization(accessID: configuration.access_id,
+        return InstallAuthorization(accessID: configuration.access_id,
             credential: configuration.credential, installationID: identity)
     }
 

@@ -28,7 +28,9 @@ final class ArchiveHandler: NSObject {
 			.appendingPathComponent("FeatherInstall_\(_uuid)", isDirectory: true)
 		
 		super.init()
+		LocalAppFiles.registerInstallWork(_uniqueWorkDir)
 	}
+	deinit { cleanupWork() }
 	
 	func move() async throws {
 		guard let appUrl = Storage.shared.getAppDirectory(for: _app) else {
@@ -94,10 +96,11 @@ final class ArchiveHandler: NSObject {
 		UserDefaults.standard.integer(forKey: "Feather.compressionLevel")
 	}
 
-    func cleanupRelayWork() {
+    func cleanupWork() {
         // Only this handler's UUID workspace; signed apps and exports stay in Documents.
         guard _uniqueWorkDir.lastPathComponent == "FeatherInstall_\(_uuid)",
               _uniqueWorkDir.deletingLastPathComponent().standardizedFileURL == _fileManager.temporaryDirectory.standardizedFileURL else { return }
         try? _fileManager.removeItem(at: _uniqueWorkDir)
+        LocalAppFiles.unregisterInstallWork(_uniqueWorkDir)
     }
 }

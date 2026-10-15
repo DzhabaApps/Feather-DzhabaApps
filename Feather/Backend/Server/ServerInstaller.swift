@@ -1,124 +1,94 @@
-//
-//  Server.swift
-//  feather
-//
-//  Created by samara on 22.08.2024.
-//  Copyright © 2024 Lakr Aream. All Rights Reserved.
-//  ORIGINALLY LICENSED UNDER GPL-3.0, MODIFIED FOR USE FOR FEATHER
-//
-
 import Foundation
 import Vapor
-import NIOSSL
-import NIOTLS
 import SwiftUI
-import IDeviceSwift
 
-// MARK: - Class
-class ServerInstaller: Identifiable, ObservableObject {
-	let id = UUID()
-	let port = Int.random(in: 4000...8000)
-	private var _needsShutdown = false
-	
-	var packageUrl: URL?
-	var app: AppInfoPresentable
-	@ObservedObject var viewModel: InstallerStatusViewModel
-	private var _server: Application?
-
-	init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel, startLocal: Bool = true) throws {
-		self.app = app
-		self.viewModel = viewModel
-		if startLocal {
-			try _setup()
-			try _configureRoutes()
-			try _server?.server.start()
-			_needsShutdown = true
-		}
-	}
-	
-	deinit {
-		_shutdownServer()
-	}
-	
-	private func _setup() throws {
-		if InstallRelayClient.localLabEnabled {
-			self._server = try setupApp(port: port)
-		} else {
-			self._server = try? setupApp(port: port)
-		}
-	}
-		
-	private func _configureRoutes() throws {
-		_server?.get("*") { [weak self] req in
-			guard let self else { return Response(status: .badGateway) }
-			guard FeatherAccessManager.shared.permitsAccess() else { return Response(status: .forbidden) }
-			if InstallRelayClient.localTLSLabEnabled && req.url.path == "/dr-local-tls-check" {
-				return Response(status: .ok, body: .init(string: "dr-local-tls-ok"))
-			}
-			switch req.url.path {
-			case plistEndpoint.path:
-				self._updateStatus(.sendingManifest)
-				return Response(status: .ok, version: req.version, headers: [
-					"Content-Type": "text/xml",
-				], body: .init(data: installManifestData))
-			case displayImageSmallEndpoint.path:
-				return Response(status: .ok, version: req.version, headers: [
-					"Content-Type": "image/png",
-				], body: .init(data: displayImageSmallData))
-			case displayImageLargeEndpoint.path:
-				return Response(status: .ok, version: req.version, headers: [
-					"Content-Type": "image/png",
-				], body: .init(data: displayImageLargeData))
-			case payloadEndpoint.path:
-				guard let packageUrl = packageUrl else {
-					return Response(status: .notFound)
-				}
-				
-				self._updateStatus(.sendingPayload)
-				
-				return req.fileio.streamFile(
-					at: packageUrl.path
-				) { result in
-					switch result {
-					case .success:
-						self._updateStatus(.installing)
-					case .failure(let error):
-						self._updateStatus(.broken(error))
-					}
-
-				}
-			case "/install":
-				var headers = HTTPHeaders()
-				headers.add(name: .contentType, value: "text/html")
-				return Response(status: .ok, headers: headers, body: .init(string: self.html))
-			default:
-				return Response(status: .notFound)
-			}
-		}
-	}
-	
-	private func _shutdownServer() {
-		guard _needsShutdown else { return }
-		
-		_needsShutdown = false
-		_server?.server.shutdown()
-		_server?.shutdown()
-	}
-	
-	private func _updateStatus(_ newStatus: InstallerStatusViewModel.InstallerStatus) {
-		DispatchQueue.main.async {
-			self.viewModel.status = newStatus
-		}
-	}
-		
-	func getServerMethod() -> Int {
-		if InstallRelayClient.semiLocalLabEnabled { return 1 }
-		if InstallRelayClient.localTLSLabEnabled { return 0 }
-		return UserDefaults.standard.integer(forKey: "Feather.serverMethod")
-	}
-	
-	func getIPFix() -> Bool {
-		if InstallRelayClient.semiLocalLabEnabled { return true }
-		return UserDefaults.standard.bool(forKey: "Feather.ipFix")
-	}
+final class ServerInstaller: ObservableObject {
+    let id = UUID()
+    private(set) var port = Int.random(in: 4000...8000)
+    var app: AppInfoPresentable
+    @ObservedObject var viewModel: InstallerStatusViewModel
+    private var server: Application?
+    private var packageURL: URL?
+    private let lock = NSLock()
+    private var readers = 0
+    private var cleanupRequested = false
+    private var cleanup: (() -> Void)?
+    init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel) {
+        self.app = app; self.viewModel = viewModel
+    }
+    deinit { stop() }
+    func start() throws {
+        guard server == nil else { return }
+        var lastError: Error = InstallManifestError.unavailable
+        for _ in 0..<3 {
+            port = Int.random(in: 4000...8000)
+            let candidate = try setupApp(port: port)
+            configure(candidate)
+            do {
+                try candidate.server.start()
+                server = candidate
+                return
+            } catch { lastError = error; candidate.shutdown() }
+        }
+        throw lastError
+    }
+    func setPackage(_ url: URL, cleanup: @escaping () -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        packageURL = url; self.cleanup = cleanup
+    }
+    func stop() {
+        if let server {
+            self.server = nil
+            server.server.shutdown()
+            server.shutdown()
+        }
+        lock.lock()
+        cleanupRequested = true
+        let action = readers == 0 ? cleanup : nil
+        if readers == 0 { cleanup = nil; packageURL = nil }
+        lock.unlock()
+        action?()
+    }
+    private func finishRead() {
+        lock.lock()
+        readers = max(0, readers - 1)
+        let action = readers == 0 && cleanupRequested ? cleanup : nil
+        if action != nil { cleanup = nil; packageURL = nil }
+        lock.unlock()
+        action?()
+    }
+    private func status(_ value: InstallerStatusViewModel.InstallerStatus) {
+        DispatchQueue.main.async { self.viewModel.status = value }
+    }
+    private func configure(_ candidate: Application) {
+        candidate.get("*") { [weak self] req -> Response in
+            guard let self, FeatherAccessManager.shared.permitsAccess() else { return Response(status: .forbidden) }
+            switch req.url.path {
+            case self.payloadEndpoint.path:
+                self.lock.lock()
+                guard !self.cleanupRequested, let url = self.packageURL else {
+                    self.lock.unlock(); return Response(status: .notFound)
+                }
+                if req.method == .HEAD {
+                    self.lock.unlock()
+                    let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+                    return Response(status: .ok, headers: ["Content-Length": String(size), "Content-Type": "application/octet-stream"])
+                }
+                self.readers += 1; self.lock.unlock()
+                self.status(.sendingPayload)
+                return req.fileio.streamFile(at: url.path) { result in
+                    self.finishRead()
+                    switch result {
+                    case .success: self.status(.installing)
+                    case .failure(let error): self.status(.broken(error))
+                    }
+                }
+            case self.displayImageSmallEndpoint.path:
+                return Response(status: .ok, headers: ["Content-Type": "image/png"], body: .init(data: self.displayImageSmallData))
+            case self.displayImageLargeEndpoint.path:
+                return Response(status: .ok, headers: ["Content-Type": "image/png"], body: .init(data: self.displayImageLargeData))
+            default: return Response(status: .notFound)
+            }
+        }
+    }
 }
