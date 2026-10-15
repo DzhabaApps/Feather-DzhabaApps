@@ -62,6 +62,7 @@ struct InstallPreviewView: View {
 		
 		ZStack {
 			InstallProgressView(app: app, viewModel: viewModel)
+                .offset(y: canOpenRelayPage ? -20 : 0)
 			_status()
 			_button()
 		}
@@ -156,10 +157,13 @@ struct InstallPreviewView: View {
                 Button {
                     _isWebviewPresenting = true
                 } label: {
-                    NBButton("Открыть через Safari", systemImage: "", style: .text)
+                    Text("Открыть через Safari").font(.footnote)
+                        .frame(minHeight: 44)
                 }
-                .padding()
-                .padding(.top, 112)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .padding(.horizontal)
+                .padding(.top, 60)
             }
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canOpenRelayPage ? .center : .bottomTrailing)
