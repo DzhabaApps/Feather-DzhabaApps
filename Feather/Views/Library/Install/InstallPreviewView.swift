@@ -10,6 +10,9 @@ struct InstallPreviewView: View {
     @State private var progressTask: Task<Void, Never>?
     @State private var deadlineTask: Task<Void, Never>?
     @State private var manifest: InstallManifest?
+    @State private var shownError = false
+    @State private var visible = false
+    @State private var foregroundRequired = false
     private let client = InstallManifestClient()
     var app: AppInfoPresentable
     @StateObject var viewModel: InstallerStatusViewModel
@@ -30,7 +33,7 @@ struct InstallPreviewView: View {
         let radius: CGFloat = { if #available(iOS 26.0, *) { return 28 }; return 10.5 }()
         ZStack {
             InstallProgressView(app: app, viewModel: viewModel).offset(y: canOpenPage ? -20 : 0)
-            Label(viewModel.statusLabel, systemImage: viewModel.statusImage)
+            Label(foregroundRequired ? "Оставьте DR Store открытым до окончания установки" : viewModel.statusLabel, systemImage: viewModel.statusImage)
                 .padding().labelStyle(.titleAndIcon)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .animation(.smooth, value: viewModel.statusImage)
@@ -57,14 +60,16 @@ struct InstallPreviewView: View {
                 progressTask?.cancel(); progressTask = nil
                 deadlineTask?.cancel(); deadlineTask = nil
                 installer.stop()
+                if case .broken(let error) = status { presentError(error) }
                 #if !targetEnvironment(macCatalyst)
                 BackgroundAudioManager.shared.stop()
                 #endif
             default: break
             }
         }
-        .onAppear(perform: install)
+        .onAppear { visible = true; install() }
         .onDisappear {
+            visible = false
             installationTask?.cancel(); installationTask = nil
             progressTask?.cancel(); progressTask = nil
             deadlineTask?.cancel(); deadlineTask = nil
@@ -103,7 +108,7 @@ struct InstallPreviewView: View {
                 if !isSharing {
                     try installer.start()
                     #if !targetEnvironment(macCatalyst)
-                    _ = BackgroundAudioManager.shared.start()
+                    foregroundRequired = !BackgroundAudioManager.shared.start()
                     #endif
                 }
                 try Task.checkCancellation()
@@ -133,6 +138,11 @@ struct InstallPreviewView: View {
         viewModel.status = .broken(error)
         showingSafari = false
         installer.stop()
+        presentError(error)
+    }
+    private func presentError(_ error: Error) {
+        guard visible, !shownError else { return }
+        shownError = true
         UIAlertController.showAlertWithOk(title: .localized("Install"), message: error.localizedDescription,
             action: { HeartbeatManager.shared.start(true); dismiss() })
     }
