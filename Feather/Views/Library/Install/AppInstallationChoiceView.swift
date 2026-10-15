@@ -126,7 +126,7 @@ struct AppInstallationChoiceView: View {
         do {
             copies = try installer.copies.copies(for: request.originalIdentifier)
             let number = try installer.copies.nextNumber(for: request.originalIdentifier)
-            name = String(request.originalName.prefix(40)) + " — копия \(number)"
+            name = String(request.originalName.prefix(40)) + " \(number)"
             loadFailed = false
         } catch {
             loadFailed = true

@@ -9,6 +9,7 @@ import SwiftUI
 import NimbleViews
 import IDeviceSwift
 import OSLog
+import Zip
 
 // MARK: - View
 struct InstallPreviewView: View {
@@ -25,6 +26,10 @@ struct InstallPreviewView: View {
     @State private var relayHandedOff = false
     private let relayClient = InstallRelayClient()
     private var usesRelay: Bool { InstallRelayClient.enabled && _installationMethod == 0 && _serverMethod == 2 && !isSharing }
+    private var canOpenRelayPage: Bool {
+        if case .ready = viewModel.status { return usesRelay && relayJob != nil }
+        return false
+    }
 	
 	var app: AppInfoPresentable
 	@StateObject var viewModel: InstallerStatusViewModel
@@ -72,7 +77,7 @@ struct InstallPreviewView: View {
 				if case .ready = newStatus {
                     if usesRelay && relayJob != nil {
                         relayHandedOff = true
-                        _isWebviewPresenting = true
+                        openRelayInstallation()
                     } else if _serverMethod == 0 {
 						UIApplication.shared.open(URL(string: installer.iTunesLink)!)
 					} else if _serverMethod == 1 {
@@ -147,6 +152,14 @@ struct InstallPreviewView: View {
 				.padding()
 				.compatTransition()
 			}
+            else if canOpenRelayPage {
+                Button {
+                    _isWebviewPresenting = true
+                } label: {
+                    NBButton("Открыть страницу установки", systemImage: "", style: .text)
+                }
+                .padding()
+            }
 		}
 		.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
 		.animation(.easeInOut(duration: 0.3), value: viewModel.isCompleted)
@@ -229,6 +242,21 @@ struct InstallPreviewView: View {
 		}
 	}
 
+    private func openRelayInstallation() {
+        guard let job = relayJob else { return }
+        var components = URLComponents()
+        components.scheme = "itms-services"
+        components.host = ""
+        components.queryItems = [URLQueryItem(name: "action", value: "download-manifest"),
+                                 URLQueryItem(name: "url", value: job.manifest_url.absoluteString)]
+        guard let url = components.url else { _isWebviewPresenting = true; return }
+        UIApplication.shared.open(url, options: [:]) { accepted in
+            Task { @MainActor in
+                if !accepted { _isWebviewPresenting = true }
+            }
+        }
+    }
+
     private func installThroughRelay() {
         guard relayTask == nil else { return }
         relayTask = Task { @MainActor in
@@ -238,13 +266,16 @@ struct InstallPreviewView: View {
                 let authorization = try FeatherAccessManager.shared.relayAuthorization()
                 relayText = "Подготавливаем приложение"
                 try await handler.move()
-                let package = try await handler.archive()
+                let package = try await handler.archive(compression: .BestSpeed)
                 try Task.checkCancellation()
                 relayText = "Передаём приложение для установки"
                 viewModel.status = .sendingPayload
                 let job = try await relayClient.prepare(package: package, bundleID: app.identifier ?? "",
                     version: app.version ?? "1", title: app.name ?? "Приложение", authorization: authorization) { progress in
-                    Task { @MainActor in viewModel.uploadProgress = progress }
+                    Task { @MainActor in
+                        viewModel.uploadProgress = progress
+                        relayText = "Передаём приложение для установки: \(Int(progress * 100))%"
+                    }
                 }
                 handler.cleanupRelayWork()
                 try Task.checkCancellation()
