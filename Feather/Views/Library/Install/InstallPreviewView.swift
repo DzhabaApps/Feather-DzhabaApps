@@ -278,10 +278,13 @@ struct InstallPreviewView: View {
                 let job = try await relayClient.prepare(package: package, bundleID: app.identifier ?? "",
                     version: app.version ?? "1", title: app.name ?? "Приложение", authorization: authorization) { progress in
                     Task { @MainActor in
-                        viewModel.uploadProgress = progress
-                        relayText = "Передаём приложение для установки: \(Int(progress * 100))%"
+                        if case .sendingPayload = viewModel.status {
+                            viewModel.uploadProgress = progress
+                            relayText = "Передаём приложение для установки: \(Int(progress * 100))%"
+                        }
                     }
                 }
+                viewModel.uploadProgress = 1
                 handler.cleanupRelayWork()
                 try Task.checkCancellation()
                 relayJob = job
