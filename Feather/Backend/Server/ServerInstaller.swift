@@ -41,7 +41,11 @@ class ServerInstaller: Identifiable, ObservableObject {
 	}
 	
 	private func _setup() throws {
-		self._server = try? setupApp(port: port)
+		if InstallRelayClient.localTLSLabEnabled {
+			self._server = try setupApp(port: port)
+		} else {
+			self._server = try? setupApp(port: port)
+		}
 	}
 		
 	private func _configureRoutes() throws {
@@ -105,7 +109,8 @@ class ServerInstaller: Identifiable, ObservableObject {
 	}
 		
 	func getServerMethod() -> Int {
-		UserDefaults.standard.integer(forKey: "Feather.serverMethod")
+		if InstallRelayClient.localTLSLabEnabled { return 0 }
+		return UserDefaults.standard.integer(forKey: "Feather.serverMethod")
 	}
 	
 	func getIPFix() -> Bool {

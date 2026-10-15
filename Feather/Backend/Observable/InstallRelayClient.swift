@@ -53,7 +53,9 @@ private final class RelayTransferDelegate: NSObject, URLSessionTaskDelegate, @un
 
 actor InstallRelayClient {
     static let endpoint = URL(string: "https://dzhabaapps.ru/api/install-relay")!
-    static var enabled: Bool { Bundle.main.object(forInfoDictionaryKey: "DRStoreInstallRelay") as? Bool == true }
+    // Set only in the owner's private diagnostic IPA, never in the public build.
+    static var localTLSLabEnabled: Bool { Bundle.main.object(forInfoDictionaryKey: "DRStoreLocalTLSLab") as? Bool == true }
+    static var enabled: Bool { !localTLSLabEnabled && Bundle.main.object(forInfoDictionaryKey: "DRStoreInstallRelay") as? Bool == true }
     private let endpoint: URL
     private let session: URLSession
     private var currentJob: InstallRelayJob?

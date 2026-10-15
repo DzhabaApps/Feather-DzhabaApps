@@ -34,7 +34,7 @@ extension ServerInstaller {
 		
 		app.http.server.configuration.hostname = sni()
 		app.http.server.configuration.tcpNoDelay = true
-		app.http.server.configuration.address = .hostname("0.0.0.0", port: port)
+		app.http.server.configuration.address = .hostname(InstallRelayClient.localTLSLabEnabled ? "127.0.0.1" : "0.0.0.0", port: port)
 		app.http.server.configuration.port = port
 		app.routes.defaultMaxBodySize = "128mb"
 		app.routes.caseInsensitive = false
@@ -60,6 +60,7 @@ extension ServerInstaller {
 			let crt = Self.getUrl("server", ext: "crt"),
 			let pem = Self.getUrl("server", ext: "pem")
 		else {
+			if InstallRelayClient.localTLSLabEnabled { throw CocoaError(.fileReadNoSuchFile) }
 			return nil
 		}
 		
@@ -85,6 +86,10 @@ extension ServerInstaller {
 
 extension ServerInstaller {
 	static func getUrl(_ name: String, ext: String) -> URL? {
+		if InstallRelayClient.localTLSLabEnabled {
+			// Never reuse a revoked document override or silently fall back to Backloop.
+			return Bundle.main.url(forResource: "dr-local-" + name, withExtension: ext)
+		}
 		let fileManager = FileManager.default
 		
 		let documentsURL = URL.documentsDirectory.appendingPathComponent("\(name).\(ext)")

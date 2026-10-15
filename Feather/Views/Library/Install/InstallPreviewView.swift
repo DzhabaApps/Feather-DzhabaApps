@@ -40,6 +40,10 @@ struct InstallPreviewView: View {
 	init(app: AppInfoPresentable, isSharing: Bool = false) {
 		self.app = app
 		self.isSharing = isSharing
+        if InstallRelayClient.localTLSLabEnabled {
+            UserDefaults.standard.set(0, forKey: "Feather.installationMethod")
+            UserDefaults.standard.set(0, forKey: "Feather.serverMethod")
+        }
         if InstallRelayClient.enabled && !UserDefaults.standard.bool(forKey: "DRStore.relayDefaultV1") {
             UserDefaults.standard.set(2, forKey: "Feather.serverMethod")
             UserDefaults.standard.set(true, forKey: "DRStore.relayDefaultV1")
