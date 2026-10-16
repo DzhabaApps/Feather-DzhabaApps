@@ -4,7 +4,7 @@ import os
 import pathlib
 import subprocess
 
-assert os.environ.get('GITHUB_REF') in {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish'}, 'Candidate packaging is restricted to its own branch'
+assert os.environ.get('GITHUB_REF') in {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish','refs/heads/codex/final-2-0'}, 'Candidate packaging is restricted to its own branch'
 subprocess.run(['make', 'verify', 'iphoneos'], check=True)
 root = pathlib.Path('packages')
 if os.environ.get('GITHUB_REF') == 'refs/heads/codex/install-completion-polish':
