@@ -104,8 +104,6 @@ struct InstallPreviewView: View {
                                 message: "Разрешите загрузку в системном окне iOS. Если окно закрыли и значок приложения остался в ожидании, зажмите его на экране «Домой», приостановите загрузку, затем вернитесь в DR Store и нажмите «Повторить установку». Скачивать приложение из каталога заново не нужно.")
                         } label: { Image(systemName: "questionmark.circle").frame(minWidth: 44, minHeight: 44) }
                             .accessibilityLabel("Как продолжить установку")
-                    } else {
-                        Button { showingSafari = true } label: { Text("Открыть через Safari") }
                     }
                 }.font(.footnote).frame(minHeight: 44).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                     .padding(.horizontal).padding(.top, 60)
