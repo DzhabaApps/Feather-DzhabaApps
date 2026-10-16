@@ -95,19 +95,19 @@ struct InstallPreviewView: View {
                     NBButton(.localized("Open"), systemImage: "", style: .text)
                 }.padding().compatTransition()
             } else if canOpenPage {
-                VStack(spacing: 0) {
+                HStack(spacing: 14) {
                     if waitingForConfirmation {
                         Button("Повторить установку") { retryInstallation() }
-                            .disabled(retryTask != nil).frame(minHeight: 44)
-                        Button("Как продолжить?") {
+                            .disabled(retryTask != nil)
+                        Button {
                             UIAlertController.showAlertWithOk(title: "Установка ожидает подтверждения",
                                 message: "Разрешите загрузку в системном окне iOS. Если окно закрыли и значок приложения остался в ожидании, зажмите его на экране «Домой», приостановите загрузку, затем вернитесь в DR Store и нажмите «Повторить установку». Скачивать приложение из каталога заново не нужно.")
-                        }.font(.footnote).frame(minHeight: 44)
+                        } label: { Image(systemName: "questionmark.circle").frame(minWidth: 44, minHeight: 44) }
+                            .accessibilityLabel("Как продолжить установку")
+                    } else {
+                        Button { showingSafari = true } label: { Text("Открыть через Safari") }
                     }
-                    Button { showingSafari = true } label: {
-                        Text("Открыть через Safari").font(.footnote).frame(minHeight: 44)
-                    }
-                }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
+                }.font(.footnote).frame(minHeight: 44).buttonStyle(.plain).foregroundStyle(Color.accentColor)
                     .padding(.horizontal).padding(.top, 60)
             }
         }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: canOpenPage ? .center : .bottomTrailing)
