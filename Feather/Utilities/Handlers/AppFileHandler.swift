@@ -75,7 +75,7 @@ final class AppFileHandler: NSObject, @unchecked Sendable {
 									
 									#if !targetEnvironment(macCatalyst)
 									if #available(iOS 26.0, *) {
-										BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress)
+										BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress, stage: "Подготовка приложения")
 									}
 									#endif
 								}

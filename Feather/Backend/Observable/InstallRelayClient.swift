@@ -1,5 +1,54 @@
 import Foundation
 
+/// A dismissed consent dialog may briefly report progress and then disappear.
+/// Keep the local package available until iOS has actually received it.
+struct InstallationObservation {
+    private var started = false
+    private var endedSamples = 0
+    mutating func completed(raw: Double?, payloadDelivered: Bool) -> Bool {
+        if let raw, raw.isFinite, raw > 0 {
+            started = true; endedSamples = 0
+        } else if started && payloadDelivered {
+            endedSamples += 1
+        } else { endedSamples = 0 }
+        return started && payloadDelivered && endedSamples >= 3
+    }
+}
+
+/// iOS may read an IPA in ranges; a successful prefix request is not delivery.
+struct InstallPayloadCoverage {
+    private var ranges: [Range<Int64>] = []
+    mutating func record(size: Int64, rangeHeader: String?) -> Bool {
+        guard size > 0 else { return false }
+        var start: Int64 = 0; var end = size
+        if let header = rangeHeader {
+            guard header.hasPrefix("bytes="), !header.contains(",") else { return false }
+            let parts = header.dropFirst(6).split(separator: "-", omittingEmptySubsequences: false)
+            guard parts.count == 2 else { return false }
+            if parts[0].isEmpty {
+                guard let suffix = Int64(parts[1]), suffix > 0 else { return false }
+                start = max(0, size - min(size, suffix))
+            } else {
+                guard let first = Int64(parts[0]), first >= 0, first < size else { return false }
+                start = first
+                if !parts[1].isEmpty {
+                    guard let last = Int64(parts[1]), last >= first else { return false }
+                    end = min(last, size - 1) + 1
+                }
+            }
+        }
+        ranges.append(start..<end)
+        var merged: [Range<Int64>] = []
+        for range in ranges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            if let last = merged.last, range.lowerBound <= last.upperBound {
+                merged[merged.count - 1] = last.lowerBound..<max(last.upperBound, range.upperBound)
+            } else { merged.append(range) }
+        }
+        ranges = merged
+        return ranges.count == 1 && ranges[0] == (0..<size)
+    }
+}
+
 struct InstallAuthorization: Sendable {
     let accessID: String
     let credential: String

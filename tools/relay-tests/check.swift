@@ -36,6 +36,26 @@ final class Stub: URLProtocol, @unchecked Sendable {
 }
 @main struct Checks {
     static func main() async throws {
+        var observation = InstallationObservation()
+        let dismissedConsent: [Double?] = [0.1, nil, nil, nil, nil]
+        for sample in dismissedConsent {
+            assert(!observation.completed(raw: sample, payloadDelivered: false), "Dismissed iOS consent must not delete the package as completed")
+        }
+        let successfulRetry: [Double?] = [0.65, 0.9, nil, nil]
+        for sample in successfulRetry {
+            assert(!observation.completed(raw: sample, payloadDelivered: true), "Wait for stable end after payload transfer")
+        }
+        assert(observation.completed(raw: nil, payloadDelivered: true))
+        var untouched = InstallationObservation()
+        for _ in 0..<5 { assert(!untouched.completed(raw: nil, payloadDelivered: true)) }
+        var payload = InstallPayloadCoverage()
+        assert(!payload.record(size: 1000, rangeHeader: "bytes=0-63"), "iOS metadata probe is not a complete download")
+        assert(!payload.record(size: 1000, rangeHeader: "bytes=0-63"), "Duplicate prefix cannot complete delivery")
+        assert(!payload.record(size: 1000, rangeHeader: "bytes=500-"), "Keep the missing middle")
+        assert(payload.record(size: 1000, rangeHeader: "bytes=64-499"), "Resumed ranges must cover the actual full IPA")
+        var suffix = InstallPayloadCoverage()
+        assert(!suffix.record(size: 1000, rangeHeader: "bytes=-10"))
+        assert(suffix.record(size: 1000, rangeHeader: nil))
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [Stub.self]
         let session = URLSession(configuration: config)
         let client = InstallManifestClient(endpoint: URL(string: "https://fixture.invalid/api/install-manifest")!, session: session)

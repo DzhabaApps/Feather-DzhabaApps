@@ -13,7 +13,7 @@ import uuid
 
 IDENTITY = 'ru.dzhabaapps.fizer.preview'
 
-def exercise(root, app, device):
+def exercise(root, app, device, hold_import=True):
     def run(*args, **kwargs):
         return subprocess.run(args, cwd=root, check=True, text=True, **kwargs)
     # Loopback HTTP is allowed only in the installed simulator copy, never in the IPA.
@@ -54,6 +54,7 @@ def exercise(root, app, device):
     url=f'http://127.0.0.1:{server.server_port}/fixture.ipa'
     container=pathlib.Path(run('xcrun','simctl','get_app_container',device,IDENTITY,'data',capture_output=True).stdout.strip())
     env=os.environ.copy();env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN']='background-transfer';env['SIMCTL_CHILD_FIZER_BACKGROUND_TEST_URL']=url;env['SIMCTL_CHILD_FIZER_BACKGROUND_TEST_HOLD_IMPORT']='1'
+    if not hold_import: env.pop('SIMCTL_CHILD_FIZER_BACKGROUND_TEST_HOLD_IMPORT',None)
     try:
         subprocess.run(['xcrun','simctl','terminate',device,IDENTITY],cwd=root,capture_output=True)
         for name in ['background-test-lifecycle.txt','background-test-result.json','background-test-diagnostic.txt']:
@@ -71,6 +72,8 @@ def exercise(root, app, device):
             while time.monotonic()<deadline:
                 received=list((container/'Library/Application Support/FizerDownloads').glob('*/package.ipa'))
                 if completed.is_set() and received: return received
+                result=container/'Documents/background-test-result.json'
+                if not hold_import and completed.is_set() and result.exists(): return [result]
                 time.sleep(1)
             return []
         received=delivered(45)
@@ -87,17 +90,34 @@ def exercise(root, app, device):
             assert received, 'Actual foreground download failed to complete and persist'
             background_status='unverified-simulator-runtime-unavailable'
             foreground_status='passed-native-simulator'
-        assert received[0].read_bytes()==payload, 'Received file differs from the served fixture'
+        if hold_import:
+            assert received[0].read_bytes()==payload, 'Received file differs from the served fixture'
         # Terminate after delivery, before foreground unpacking, and recover the persisted package.
-        run('xcrun','simctl','terminate',device,IDENTITY)
-        env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN']='library'
-        env.pop('SIMCTL_CHILD_FIZER_BACKGROUND_TEST_HOLD_IMPORT',None)
-        run('xcrun','simctl','launch',device,IDENTITY,env=env)
+        if hold_import:
+            run('xcrun','simctl','terminate',device,IDENTITY)
+            env['SIMCTL_CHILD_FIZER_PREVIEW_SCREEN']='library'
+            env.pop('SIMCTL_CHILD_FIZER_BACKGROUND_TEST_HOLD_IMPORT',None)
+            run('xcrun','simctl','launch',device,IDENTITY,env=env)
         result=container/'Documents/background-test-result.json'
+        if not hold_import and not result.exists():
+            # Receiving a file during the short suspension grace is not a runtime
+            # grant for unpacking. Do not label that case a background success.
+            time.sleep(5)
+            if not result.exists():
+                diagnostic=container/'Documents/background-test-diagnostic.txt'
+                detail=diagnostic.read_text(encoding='utf-8') if diagnostic.exists() else ''
+                logs=subprocess.run(['xcrun','simctl','spawn',device,'log','show','--last','4m','--style','compact','--predicate','process == "Feather" AND eventMessage CONTAINS "error"'],capture_output=True,text=True).stdout
+                assert 'continued-rejected BGTaskSchedulerErrorDomain 1' in detail and 'continued-active' not in detail and 'associating with audio session (0x0), error -10879' in logs, 'Import failed with an available runtime'
+                background_status='unverified-simulator-runtime-unavailable'
+                foreground_status='passed-native-simulator'
+                run('xcrun','simctl','launch',device,IDENTITY,env=env)
         deadline=time.monotonic()+30
         while time.monotonic()<deadline and not result.exists(): time.sleep(1)
         assert result.exists() and json.loads(result.read_text())['imported'] is True and json.loads(result.read_text())['source']==url, 'Completed package did not recover/import on relaunch'
-        (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':background_status,'foregroundTransfer':foreground_status,'persistentRecovery':'passed','commit':info['CFBundleVersion']}),encoding='utf-8')
+        preparation='not-exercised' if hold_import else ('passed-native-simulator' if json.loads(result.read_text())['background'] else 'unverified-simulator-runtime-unavailable')
+        if not hold_import and background_status=='passed-native-simulator':
+            assert preparation=='passed-native-simulator','Import waited for foreground despite an available background runtime'
+        (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':background_status,'foregroundTransfer':foreground_status,'persistentRecovery':'passed' if hold_import else 'covered-by-separate-recovery-run','backgroundPreparation':preparation,'commit':info['CFBundleVersion']}),encoding='utf-8')
         print(f'Native transfer validation: background={background_status}; foreground={foreground_status}; actual durable bytes verified and relaunch imported successfully',flush=True)
         return container
     except Exception:

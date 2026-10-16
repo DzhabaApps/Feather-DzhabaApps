@@ -123,7 +123,9 @@ class DownloadManager: NSObject, ObservableObject {
 
     private func updateAudioRuntime() {
         #if !targetEnvironment(macCatalyst)
-        let running = downloads.filter { !$0.onlyArchiving && $0.task?.state == .running && $0.progress < 1 }
+        let running = downloads.filter {
+            !$0.onlyArchiving && (($0.task?.state == .running && $0.progress < 1) || processing.contains($0.id))
+        }
         let needed: Bool
         if #available(iOS 26.0, *) {
             // Queued/rejected continued work must not silently strand a transfer.
@@ -145,6 +147,8 @@ class DownloadManager: NSObject, ObservableObject {
     func backgroundRuntimeDidChange(_ status: String) {
         previewDiagnostic(status)
         updateAudioRuntime()
+        // A queued continued task can start after the file has already arrived.
+        if status == "continued-active" { processReadyDownloads() }
     }
 
     func suspendForBackgroundExpiration(_ id: String) {
@@ -286,7 +290,7 @@ class DownloadManager: NSObject, ObservableObject {
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.startTask(for: download.id, filename: download.displayName)
-            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.progress)
+            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress, stage: "Загрузка")
         }
         #endif
     }
@@ -322,14 +326,22 @@ class DownloadManager: NSObject, ObservableObject {
     func processForegroundDownloads() { processReadyDownloads() }
 
     private func processReadyDownloads() {
-        guard !isRestoring, UIApplication.shared.applicationState == .active else { return }
-        if let message = pendingError { pendingError = nil; reportError(message) }
+        guard !isRestoring else { return }
+        let foreground = UIApplication.shared.applicationState == .active
+        if foreground, let message = pendingError { pendingError = nil; reportError(message) }
         for download in downloads {
             guard !download.cancellation.isCancelled else { continue }
             guard let record = records[download.id], !processing.contains(download.id) else { continue }
-            startProgress(download)
-            if download.task?.state == .suspended { download.task?.resume(); updateAudioRuntime() }
+            if foreground { startProgress(download) }
+            if foreground, download.task?.state == .suspended { download.task?.resume(); updateAudioRuntime() }
             if store.isReady(record) {
+                var runtimeAvailable = foreground || audioIsRunning
+                #if !targetEnvironment(macCatalyst)
+                if #available(iOS 26.0, *) {
+                    runtimeAvailable = runtimeAvailable || BackgroundTaskManager.shared.isRunning(for: download.id)
+                }
+                #endif
+                guard runtimeAvailable else { continue }
                 // Isolated simulator fixture retains actual received bytes for verification.
                 if Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview",
                    ProcessInfo.processInfo.environment["FIZER_BACKGROUND_TEST_HOLD_IMPORT"] == "1" { continue }
@@ -337,8 +349,9 @@ class DownloadManager: NSObject, ObservableObject {
                 // Import may have succeeded just before the system terminated the app.
                 if RepositoryInstallCoordinator.shared.libraryApp(for: record.source) != nil { finish(download, success: true); continue }
                 processing.insert(download.id)
+                updateAudioRuntime()
                 try? handlePachageFile(url: store.packageURL(record), dl: download)
-            } else if download.task == nil, FeatherAccessManager.shared.permitsAccess() {
+            } else if foreground, download.task == nil, FeatherAccessManager.shared.permitsAccess() {
                 // A user force-quit cancels iOS transfers; restarting the app permits a fresh attempt.
                 beginTask(download, record: record)
             }
@@ -351,7 +364,8 @@ extension DownloadManager: URLSessionDownloadDelegate {
         FR.handlePackageFile(url, download: dl) { error in
             if let error, !dl.cancellation.isCancelled { self.reportError(error.localizedDescription) }
             if dl.id == "background-integration", Bundle.main.bundleIdentifier == "ru.dzhabaapps.fizer.preview" {
-                let result = ["imported": error == nil, "source": dl.source.absoluteString] as [String: Any]
+                let result = ["imported": error == nil, "source": dl.source.absoluteString,
+                              "background": UIApplication.shared.applicationState != .active] as [String: Any]
                 if let data = try? JSONSerialization.data(withJSONObject: result) {
                     try? data.write(to: URL.documentsDirectory.appendingPathComponent("background-test-result.json"), options: .atomic)
                 }
@@ -374,13 +388,12 @@ extension DownloadManager: URLSessionDownloadDelegate {
             download.progress = 1
             #if !targetEnvironment(macCatalyst)
             if #available(iOS 26.0, *) {
-                BackgroundTaskManager.shared.updateProgress(for: download.id, progress: 1)
-                BackgroundTaskManager.shared.stopTask(for: download.id, success: true)
+                BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress, stage: "Подготовка приложения")
             }
             #endif
             download.task = nil
-            updateAudioRuntime()
             processReadyDownloads()
+            updateAudioRuntime()
         } catch { finish(download); reportError(error.localizedDescription) }
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
@@ -390,7 +403,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
         download.bytesDownloaded = totalBytesWritten
         download.totalBytes = totalBytesExpectedToWrite
         #if !targetEnvironment(macCatalyst)
-        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.progress) }
+        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress, stage: "Загрузка") }
         #endif
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

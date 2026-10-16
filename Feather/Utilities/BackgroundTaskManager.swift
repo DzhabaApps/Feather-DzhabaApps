@@ -32,7 +32,7 @@ class BackgroundTaskManager: ObservableObject {
 				guard let progress = self.requested[task.identifier] else { task.setTaskCompleted(success: false); return }
                 self.activeTasks[task.identifier] = task
                 task.progress.totalUnitCount = 1000
-                task.progress.completedUnitCount = Int64(progress * 1000)
+                task.progress.completedUnitCount = Int64(min(0.99, progress) * 1000)
 				
                 task.expirationHandler = {
                     DispatchQueue.main.async {
@@ -73,16 +73,17 @@ class BackgroundTaskManager: ObservableObject {
         activeTasks["\(baseId).\(downloadId.md5)"] != nil
     }
 
-	func updateProgress(for downloadId: String, progress: Double) {
+	func updateProgress(for downloadId: String, progress: Double, stage: String? = nil) {
 		let taskIdentifier = "\(baseId).\(downloadId.md5)"
 		
         guard requested[taskIdentifier] != nil, progress.isFinite else { return }
-        let value = min(1, max(0, progress))
+        // 100% means the app is in the library, not merely received/unzipped.
+        let value = min(0.99, max(0, progress))
         requested[taskIdentifier] = value
         guard let task = activeTasks[taskIdentifier] else { return }
         task.progress.totalUnitCount = 1000
         task.progress.completedUnitCount = Int64(value * 1000)
-        task.updateTitle(task.title, subtitle: "\(Int(value * 100))%")
+        task.updateTitle(task.title, subtitle: "\(stage ?? "Подготовка") · \(Int(value * 100))%")
 	}
 	
 	func stopTask(for downloadId: String, success: Bool) {
@@ -90,6 +91,7 @@ class BackgroundTaskManager: ObservableObject {
 		requested.removeValue(forKey: taskIdentifier)
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskIdentifier)
         guard let task = activeTasks[taskIdentifier] else { return }
+		if success { task.progress.completedUnitCount = task.progress.totalUnitCount }
 		task.setTaskCompleted(success: success)
 		activeTasks.removeValue(forKey: taskIdentifier)
 	}

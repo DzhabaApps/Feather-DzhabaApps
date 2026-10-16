@@ -14,6 +14,7 @@ final class ServerInstaller: ObservableObject {
     private var readers = 0
     private var cleanupRequested = false
     private var cleanup: (() -> Void)?
+    private var coverage = InstallPayloadCoverage()
     init(app: AppInfoPresentable, viewModel: InstallerStatusViewModel) {
         self.app = app; self.viewModel = viewModel
     }
@@ -77,10 +78,16 @@ final class ServerInstaller: ObservableObject {
                 }
                 self.readers += 1; self.lock.unlock()
                 self.status(.sendingPayload)
+                let size = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+                let range = req.headers.first(name: "Range")
                 return req.fileio.streamFile(at: url.path) { result in
                     self.finishRead()
                     switch result {
-                    case .success: self.status(.installing)
+                    case .success:
+                        self.lock.lock()
+                        let delivered = self.coverage.record(size: size, rangeHeader: range)
+                        self.lock.unlock()
+                        if delivered { self.status(.installing) }
                     case .failure(let error): self.status(.broken(error))
                     }
                 }

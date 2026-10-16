@@ -61,7 +61,7 @@ struct DownloadItemView: View {
 				.progressViewStyle(.linear)
 			
 			HStack {
-				Text(verbatim: "\(Int(overallProgress * 100))%")
+				Text(verbatim: "\(progress >= 1 ? "Подготовка · " : "")\(Int(overallProgress * 100))%")
 					.contentTransition(.numericText())
 				Spacer()
 				if totalBytes > 0 {

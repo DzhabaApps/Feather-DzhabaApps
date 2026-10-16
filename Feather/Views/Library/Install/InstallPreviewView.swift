@@ -13,6 +13,10 @@ struct InstallPreviewView: View {
     @State private var shownError = false
     @State private var visible = false
     @State private var foregroundRequired = false
+    @State private var payloadDelivered = false
+    @State private var waitingForConfirmation = false
+    @State private var requestedAt = Date()
+    @State private var retryTask: Task<Void, Never>?
     private let client = InstallManifestClient()
     var app: AppInfoPresentable
     @StateObject var viewModel: InstallerStatusViewModel
@@ -33,7 +37,7 @@ struct InstallPreviewView: View {
         let radius: CGFloat = { if #available(iOS 26.0, *) { return 28 }; return 10.5 }()
         ZStack {
             InstallProgressView(app: app, viewModel: viewModel).offset(y: canOpenPage ? -20 : 0)
-            Label(foregroundRequired ? "Оставьте DR Store открытым до окончания установки" : viewModel.statusLabel, systemImage: viewModel.statusImage)
+            Label(waitingForConfirmation ? "Ожидаем подтверждение iOS" : (foregroundRequired ? "Оставьте DR Store открытым до окончания установки" : viewModel.statusLabel), systemImage: viewModel.statusImage)
                 .padding().labelStyle(.titleAndIcon)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .animation(.smooth, value: viewModel.statusImage)
@@ -47,6 +51,7 @@ struct InstallPreviewView: View {
         .onReceive(viewModel.$status) { status in
             switch status {
             case .ready:
+                requestedAt = Date(); waitingForConfirmation = false
                 openInstallation()
                 if progressTask == nil { startProgressPolling() }
                 deadlineTask?.cancel()
@@ -55,10 +60,13 @@ struct InstallPreviewView: View {
                     catch { return }
                     fail(InstallManifestError.timeout)
                 }
-            case .sendingPayload: showingSafari = false
+            case .sendingPayload:
+                waitingForConfirmation = false; showingSafari = false
+            case .installing: payloadDelivered = true
             case .completed, .broken:
                 progressTask?.cancel(); progressTask = nil
                 deadlineTask?.cancel(); deadlineTask = nil
+                retryTask?.cancel(); retryTask = nil
                 installer.stop()
                 if case .broken(let error) = status { presentError(error) }
                 #if !targetEnvironment(macCatalyst)
@@ -73,6 +81,7 @@ struct InstallPreviewView: View {
             installationTask?.cancel(); installationTask = nil
             progressTask?.cancel(); progressTask = nil
             deadlineTask?.cancel(); deadlineTask = nil
+            retryTask?.cancel(); retryTask = nil
             installer.stop()
             #if !targetEnvironment(macCatalyst)
             BackgroundAudioManager.shared.stop()
@@ -86,8 +95,18 @@ struct InstallPreviewView: View {
                     NBButton(.localized("Open"), systemImage: "", style: .text)
                 }.padding().compatTransition()
             } else if canOpenPage {
-                Button { showingSafari = true } label: {
-                    Text("Открыть через Safari").font(.footnote).frame(minHeight: 44)
+                VStack(spacing: 0) {
+                    if waitingForConfirmation {
+                        Button("Повторить установку") { retryInstallation() }
+                            .disabled(retryTask != nil).frame(minHeight: 44)
+                        Button("Как продолжить?") {
+                            UIAlertController.showAlertWithOk(title: "Установка ожидает подтверждения",
+                                message: "Разрешите загрузку в системном окне iOS. Если окно закрыли и значок приложения остался в ожидании, зажмите его на экране «Домой», приостановите загрузку, затем вернитесь в DR Store и нажмите «Повторить установку». Скачивать приложение из каталога заново не нужно.")
+                        }.font(.footnote).frame(minHeight: 44)
+                    }
+                    Button { showingSafari = true } label: {
+                        Text("Открыть через Safari").font(.footnote).frame(minHeight: 44)
+                    }
                 }.buttonStyle(.plain).foregroundStyle(Color.accentColor)
                     .padding(.horizontal).padding(.top, 60)
             }
@@ -154,24 +173,42 @@ struct InstallPreviewView: View {
             }
         }
     }
+    private func retryInstallation() {
+        guard canOpenPage, retryTask == nil else { return }
+        retryTask = Task { @MainActor in
+            defer { retryTask = nil }
+            do {
+                let authorization = try FeatherAccessManager.shared.installAuthorization()
+                let result = try await client.prepare(id: installer.id, port: installer.port,
+                    bundleID: app.identifier ?? "", version: app.version ?? "1", title: app.name ?? "Приложение",
+                    authorization: authorization)
+                try Task.checkCancellation()
+                guard canOpenPage else { return }
+                manifest = result
+                viewModel.status = .ready
+            } catch is CancellationError { }
+            catch {
+                guard visible else { return }
+                // A temporary request failure must not tear down the waiting IPA.
+                UIAlertController.showAlertWithOk(title: "Повторить установку", message: error.localizedDescription)
+            }
+        }
+    }
     private func startProgressPolling() {
         let identifier = app.identifier ?? ""
         progressTask = Task { @MainActor in
-            var started = false
-            var endedSamples = 0
+            var observation = InstallationObservation()
             while !Task.isCancelled {
                 let raw = UIApplication.installProgress(for: identifier, makeSynchronous: false)
-                if let raw, raw > 0 {
-                    started = true; endedSamples = 0
+                if let raw, raw.isFinite, raw > 0 {
                     viewModel.installProgress = min(1, max(0, (raw - 0.6) / 0.3))
-                } else if started {
-                    endedSamples += 1
-                    if endedSamples >= 3 {
+                }
+                if observation.completed(raw: raw, payloadDelivered: payloadDelivered) {
                         viewModel.installProgress = 1
                         viewModel.status = .completed(.success(()))
                         return
-                    }
                 }
+                if canOpenPage && Date().timeIntervalSince(requestedAt) >= 25 { waitingForConfirmation = true }
                 do { try await Task.sleep(nanoseconds: 500_000_000) }
                 catch { return }
             }

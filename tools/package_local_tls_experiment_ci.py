@@ -4,9 +4,11 @@ import os
 import pathlib
 import subprocess
 
-assert os.environ.get('GITHUB_REF') == 'refs/heads/codex/semi-local-main', 'Candidate packaging is restricted to its own branch'
+assert os.environ.get('GITHUB_REF') in {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish'}, 'Candidate packaging is restricted to its own branch'
 subprocess.run(['make', 'verify', 'iphoneos'], check=True)
 root = pathlib.Path('packages')
+if os.environ.get('GITHUB_REF') == 'refs/heads/codex/install-completion-polish':
+    subprocess.run(['python3','tools/check_completion_ui.py'],check=True)
 assert not list(pathlib.Path('Feather').rglob('dr-local-server.pem'))
 report = {
     'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
