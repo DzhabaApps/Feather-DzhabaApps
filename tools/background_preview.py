@@ -114,7 +114,7 @@ def exercise(root, app, device, hold_import=True):
         deadline=time.monotonic()+30
         while time.monotonic()<deadline and not result.exists(): time.sleep(1)
         assert result.exists() and json.loads(result.read_text())['imported'] is True and json.loads(result.read_text())['source']==url, 'Completed package did not recover/import on relaunch'
-        preparation='not-exercised' if hold_import else ('passed-native-simulator' if json.loads(result.read_text())['background'] else 'unverified-simulator-runtime-unavailable')
+        preparation='not-exercised' if hold_import else ('passed-native-simulator' if background_status=='passed-native-simulator' and json.loads(result.read_text())['background'] else 'unverified-simulator-runtime-unavailable')
         if not hold_import and background_status=='passed-native-simulator':
             assert preparation=='passed-native-simulator','Import waited for foreground despite an available background runtime'
         (container/'Documents/background-validation.json').write_text(json.dumps({'backgroundTransfer':background_status,'foregroundTransfer':foreground_status,'persistentRecovery':'passed' if hold_import else 'covered-by-separate-recovery-run','backgroundPreparation':preparation,'commit':info['CFBundleVersion']}),encoding='utf-8')
