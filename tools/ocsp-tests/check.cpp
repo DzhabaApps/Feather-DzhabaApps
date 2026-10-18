@@ -47,12 +47,14 @@ std::vector<unsigned char> responseFor(OCSP_CERTID* id, int status, X509* issuer
 }
 
 int main() {
+    std::puts("OCSP test: generating temporary key"); std::fflush(stdout);
     Owned<EVP_PKEY_CTX, EVP_PKEY_CTX_free> ctx(EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, nullptr), EVP_PKEY_CTX_free);
     assert(ctx && EVP_PKEY_keygen_init(ctx.get()) == 1);
     assert(EVP_PKEY_CTX_set_rsa_keygen_bits(ctx.get(), 2048) == 1);
     EVP_PKEY* raw = nullptr;
     assert(EVP_PKEY_keygen(ctx.get(), &raw) == 1);
     Owned<EVP_PKEY, EVP_PKEY_free> key(raw, EVP_PKEY_free);
+    std::puts("OCSP test: creating certificates"); std::fflush(stdout);
     auto issuer = certificate(key.get(), 1);
     auto leaf = certificate(key.get(), 2);
     auto other = certificate(key.get(), 3);
@@ -60,6 +62,7 @@ int main() {
     Owned<OCSP_CERTID, OCSP_CERTID_free> wrong(OCSP_cert_to_id(nullptr, other.get(), issuer.get()), OCSP_CERTID_free);
     int count = 0;
     for (int wanted : {V_OCSP_CERTSTATUS_GOOD, V_OCSP_CERTSTATUS_REVOKED, V_OCSP_CERTSTATUS_UNKNOWN}) {
+        std::printf("OCSP test: status %d and truncated prefixes\n", wanted); std::fflush(stdout);
         auto bytes = responseFor(id.get(), wanted, issuer.get(), key.get());
         int result = -1;
         assert(ZParseOcspStatus(bytes.data(), bytes.size(), id.get(), result) && result == wanted); ++count;
@@ -71,6 +74,7 @@ int main() {
         assert(!ZParseOcspStatus(bytes.data(), bytes.size(), id.get(), result)); ++count;
     }
     auto valid = responseFor(id.get(), V_OCSP_CERTSTATUS_GOOD, issuer.get(), key.get());
+    std::puts("OCSP test: invalid and repeated responses"); std::fflush(stdout);
     int status = -1;
     assert(!ZParseOcspStatus(nullptr, 0, id.get(), status)); ++count;
     assert(!ZParseOcspStatus(valid.data(), valid.size(), nullptr, status)); ++count;
