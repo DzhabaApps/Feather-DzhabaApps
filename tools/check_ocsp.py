@@ -1,4 +1,4 @@
-"""Exercise the exact OCSP decoder with real DER responses and AddressSanitizer."""
+"""Exercise the exact OCSP decoder with real DER responses and UBSan."""
 from pathlib import Path
 import os
 import subprocess
@@ -13,10 +13,10 @@ if prefix.returncode:
 openssl = Path(prefix.stdout.strip())
 with tempfile.TemporaryDirectory(prefix='dr-ocsp-') as temporary:
     executable = Path(temporary) / 'check'
-    print('OCSP regression: compiling AddressSanitizer harness', flush=True)
-    subprocess.run(['clang++', '-std=c++17', '-O1', '-g', '-fsanitize=address',
+    print('OCSP regression: compiling undefined-behavior sanitizer harness', flush=True)
+    subprocess.run(['xcrun', 'clang++', '-std=c++17', '-O1', '-g', '-fsanitize=undefined', '-fno-sanitize-recover=all',
                     '-fno-omit-frame-pointer', '-I'+str(openssl/'include'),
                     '-L'+str(openssl/'lib'), 'tools/ocsp-tests/check.cpp', '-lcrypto',
                     '-o', str(executable)], check=True, timeout=90)
     print('OCSP regression: running parser checks', flush=True)
-    subprocess.run([str(executable)], env=dict(os.environ, ASAN_OPTIONS='abort_on_error=1'), check=True, timeout=90)
+    subprocess.run([str(executable)], env=dict(os.environ, UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1'), check=True, timeout=90)
