@@ -13,6 +13,9 @@ all:
 full: verify preview-screenshots $(PLATFORMS)
 
 verify:
+	python3 tools/check_ocsp.py
+	xcrun swiftc -parse-as-library Feather/Backend/Observable/InstructionCatalog.swift tools/instruction-catalog-tests/check.swift -o /tmp/dr-instruction-catalog-check
+	/tmp/dr-instruction-catalog-check
 	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/InstallRelayClient.swift tools/relay-tests/check.swift -o /tmp/dr-relay-check
 	/tmp/dr-relay-check
 	xcrun swiftc -parse-as-library -target $$(uname -m)-apple-macosx15.0 Feather/Backend/Observable/AppIconSelection.swift tools/icon-tests/check.swift -o /tmp/dr-icon-selection-check

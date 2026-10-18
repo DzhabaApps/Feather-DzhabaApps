@@ -55,16 +55,22 @@ struct InstructionIndex: Codable {
 @MainActor
 final class InstructionCatalog: ObservableObject {
     static let shared = InstructionCatalog()
-    static let url = URL(string: "https://raw.githubusercontent.com/DzhabaApps/Dzhaba-Apps/main/DRStore-Instructions.json")!
+    static let url = URL(string: "https://json.dzhabaapps.ru/instructions-index.json")!
+    static let fallbackURL = URL(string: "https://raw.githubusercontent.com/DzhabaApps/Dzhaba-Apps/main/DRStore-Instructions.json")!
     @Published private(set) var instructions: [StoreInstruction] = []
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
-    private let cacheURL = URL.cachesDirectory.appendingPathComponent("dr-store-instructions-v1.json")
+    private let cacheURL: URL
+    private let session: URLSession
+    private let endpoints: [URL]
     private var loadedAt: Date?
 
-    init(preview: Bool = false) {
+    init(preview: Bool = false, session: URLSession = .shared, cacheURL: URL? = nil, endpoints: [URL]? = nil) {
+        self.session = session
+        self.cacheURL = cacheURL ?? URL.cachesDirectory.appendingPathComponent("dr-store-instructions-v1.json")
+        self.endpoints = endpoints ?? [Self.url, Self.fallbackURL]
         if preview { instructions = [.sample] }
-        else if let data = try? Data(contentsOf: cacheURL), let cached = try? InstructionIndex.decode(data) {
+        else if let data = try? Data(contentsOf: self.cacheURL), let cached = try? InstructionIndex.decode(data) {
             instructions = cached.instructions
         }
     }
@@ -77,9 +83,12 @@ final class InstructionCatalog: ObservableObject {
         guard !isLoading, force || loadedAt == nil || Date().timeIntervalSince(loadedAt!) > 60 else { return }
         isLoading = true
         defer { isLoading = false }
-        do {
-            let (data, response) = try await URLSession.shared.data(for: URLRequest(
-                url: Self.url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15))
+        for endpoint in endpoints {
+          do {
+            try Task.checkCancellation()
+            let (data, response) = try await session.data(for: URLRequest(
+                url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15))
+            try Task.checkCancellation()
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             let index = try InstructionIndex.decode(data)
             instructions = index.instructions
@@ -87,9 +96,12 @@ final class InstructionCatalog: ObservableObject {
             error = nil
             try? FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: cacheURL, options: .atomic)
-        } catch {
-            self.error = instructions.isEmpty ? "Не удалось загрузить инструкции. Проверьте интернет и попробуйте ещё раз."
-                : "Не удалось обновить инструкции. Показываем сохранённые."
+            return
+          } catch is CancellationError { return }
+          catch let error as URLError where error.code == .cancelled { return }
+          catch { continue }
         }
+        self.error = instructions.isEmpty ? "Не удалось загрузить инструкции. Проверьте интернет и попробуйте ещё раз."
+            : "Не удалось обновить инструкции. Показываем сохранённые."
     }
 }
