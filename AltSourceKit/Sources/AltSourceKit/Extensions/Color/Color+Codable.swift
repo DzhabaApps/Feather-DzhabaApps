@@ -136,10 +136,15 @@ public extension Color {
 		var b: CGFloat = 0
 		var o: CGFloat = 0
 		
+		#if canImport(UIKit)
 		guard NativeColor(self).getRed(&r, green: &g, blue: &b, alpha: &o) else {
 			// You can handle the failure here as you want
 			return (0, 0, 0, 0)
 		}
+		#elseif canImport(AppKit)
+		guard let color = NativeColor(self).usingColorSpace(.deviceRGB) else { return (0, 0, 0, 0) }
+		color.getRed(&r, green: &g, blue: &b, alpha: &o)
+		#endif
 		
 		return (r, g, b, o)
 	}
