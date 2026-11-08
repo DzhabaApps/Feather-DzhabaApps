@@ -22,6 +22,11 @@ struct GameDetailPreview: View {
                 SourceAppsDetailView(source: source, app: app)
                     .task {
                         await InstructionCatalog.shared.load(force: true)
+                        // The detail view may already be loading the shared index.
+                        for _ in 0..<150 {
+                            if InstructionCatalog.shared.instructions.contains(where: { $0.id == "gta-v-install" }) { break }
+                            try? await Task.sleep(nanoseconds: 200_000_000)
+                        }
                         let report: [String: Any] = [
                             "files": app.additionalFiles?.count ?? 0,
                             "videoResolved": InstructionCatalog.shared.instructions.contains { $0.id == "gta-v-install" }
