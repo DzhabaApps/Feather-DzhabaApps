@@ -4,8 +4,10 @@ import os
 import pathlib
 import subprocess
 
-assert os.environ.get('GITHUB_REF') in {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish','refs/heads/codex/final-2-0','refs/heads/codex/startup-and-instructions','refs/heads/codex/catalog-files-build-20261108'}, 'Candidate packaging is restricted to its own branch'
+assert os.environ.get('GITHUB_REF') in {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish','refs/heads/codex/final-2-0','refs/heads/codex/startup-and-instructions','refs/heads/codex/catalog-files-build-20261108','refs/heads/codex/compact-game-detail-20261109'}, 'Candidate packaging is restricted to its own branch'
 subprocess.run(['make', 'verify', 'iphoneos'], check=True)
+if os.environ.get('GITHUB_REF') == 'refs/heads/codex/compact-game-detail-20261109':
+    subprocess.run(['python3','tools/check_compact_game_ui.py'],check=True)
 root = pathlib.Path('packages')
 if os.environ.get('GITHUB_REF') == 'refs/heads/codex/install-completion-polish':
     subprocess.run(['python3','tools/check_completion_ui.py'],check=True)

@@ -167,19 +167,21 @@ private struct InstructionNativePlayer: UIViewControllerRepresentable {
 @MainActor
 struct InstructionVideoCard: View {
     let instruction: StoreInstruction
+    private let compact: Bool
     @StateObject private var playback: InstructionPlayback
     @Environment(\.scenePhase) private var scenePhase
-    init(instruction: StoreInstruction, playback: InstructionPlayback? = nil) {
+    init(instruction: StoreInstruction, playback: InstructionPlayback? = nil, compact: Bool = false) {
         self.instruction = instruction
+        self.compact = compact
         _playback = StateObject(wrappedValue: playback ?? InstructionPlayback())
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if instruction.is_test {
+            if instruction.is_test && !compact {
                 Label("Тестовое видео", systemImage: "sparkles").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             }
-            Text(instruction.title).font(.headline)
+            if !compact { Text(instruction.title).font(.headline) }
             ZStack {
                 Color.black
                 if playback.player != nil, playback.error == nil {
@@ -205,13 +207,15 @@ struct InstructionVideoCard: View {
                 Text(error).font(.footnote).foregroundStyle(.secondary)
                 Button("Попробовать ещё раз") { playback.start(instruction.video_url) }
             }
-            if !instruction.description.isEmpty { Text(instruction.description).font(.subheadline).foregroundStyle(.secondary) }
-            ForEach(Array(instruction.steps.enumerated()), id: \.offset) { offset, step in
+            if !compact {
+              if !instruction.description.isEmpty { Text(instruction.description).font(.subheadline).foregroundStyle(.secondary) }
+              ForEach(Array(instruction.steps.enumerated()), id: \.offset) { offset, step in
                 HStack(alignment: .top, spacing: 10) {
                     Text("\(offset + 1)").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
                         .frame(width: 22, height: 22).background(.quaternary, in: Circle())
                     Text(step).font(.subheadline)
                 }
+              }
             }
         }
         .onAppear { playback.inlineVisible = true }
@@ -232,22 +236,6 @@ struct AppInstructionsBlock: View {
                 ForEach(items) { InstructionVideoCard(instruction: $0) }
                 Divider()
             }.padding(.vertical, 8)
-        }
-    }
-}
-
-struct AdditionalFileVideoLink: View {
-    let instructionID: String
-    @ObservedObject private var catalog = InstructionCatalog.shared
-    var body: some View {
-        if let instruction = catalog.instructions.first(where: { $0.id == instructionID }) {
-            NavigationLink {
-                ScrollView { InstructionVideoCard(instruction: instruction).padding() }
-                    .navigationTitle("Инструкция").navigationBarTitleDisplayMode(.inline)
-            } label: { Label("Видеоинструкция по установке", systemImage: "play.rectangle") }
-        } else {
-            Text("Видеоинструкция пока недоступна. Обновите список инструкций.")
-                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 }

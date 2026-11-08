@@ -107,6 +107,7 @@ struct FeatherApp: App {
         case "background-transfer": LibraryView().onAppear { DownloadManager.shared.startPreviewTransfer() }
         case "store-news": SourcesView(previewCategory: .all, previewNews: true)
         case "app-detail": CatalogDetailPreview()
+        case "game-detail": GameDetailPreview()
         case "store": SourcesView(previewCategory: .all)
 		case "store-finance": SourcesView(previewCategory: .finance)
 		case "store-social": SourcesView(previewCategory: .social)

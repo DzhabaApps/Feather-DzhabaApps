@@ -51,9 +51,6 @@ struct SourceAppsDetailView: View {
 							.font(.title2)
 							.fontWeight(.semibold)
 							.foregroundColor(.primary)
-						Text(app.currentDescription ?? .localized("An awesome application"))
-							.font(.subheadline)
-							.foregroundColor(.secondary)
 						
 						Spacer()
 						
@@ -68,20 +65,7 @@ struct SourceAppsDetailView: View {
 				Divider()
                 
 				if let files = app.additionalFiles, !files.isEmpty {
-					VStack(alignment: .leading, spacing: 14) {
-						Text("Дополнительные файлы").font(.title3.weight(.semibold))
-						Text("Для работы приложения нужны дополнительные данные. После скачивания переместите их в папку, указанную в видеоинструкции.")
-							.font(.subheadline).foregroundStyle(.secondary)
-						ForEach(Array(files.enumerated()), id: \.offset) { _, file in
-							VStack(alignment: .leading, spacing: 6) {
-								Text(file.name).font(.headline)
-								Text(CatalogFileSize.string(file.size)).font(.subheadline).foregroundStyle(.secondary)
-								Link(destination: file.url) { Label("Скачать файл", systemImage: "arrow.up.right.square") }
-									.buttonStyle(.bordered)
-								if let id = file.instructionID { AdditionalFileVideoLink(instructionID: id) }
-							}
-						}
-					}.padding(.vertical, 8)
+					AppAdditionalFilesView(files: files)
 					Divider()
 				}
 				if let bundleID = app.id {
