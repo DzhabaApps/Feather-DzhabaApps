@@ -227,15 +227,31 @@ struct InstructionVideoCard: View {
 struct AppInstructionsBlock: View {
     let bundleID: String
     var excludingIDs: Set<String> = []
+    var appName: String = "Приложение"
+    var iconURL: URL? = nil
     @ObservedObject private var catalog = InstructionCatalog.shared
     private var items: [StoreInstruction] { catalog.forApp(bundleID).filter { !excludingIDs.contains($0.id) } }
     var body: some View {
         if !items.isEmpty {
+          if !excludingIDs.isEmpty {
+            NavigationLink {
+                InstructionCollectionScreen(collectionID: InstructionCollections.key(for: bundleID),
+                    apps: [InstructionAppSummary(id: bundleID, name: appName, iconURL: iconURL)], catalog: catalog)
+            } label: {
+                HStack {
+                    Text("Ещё о \(InstructionCollections.title(for: bundleID, fallback: appName)) · \(InstructionCollections.countLabel(items.count))")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                }.padding(.vertical, 12)
+            }
+          } else {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Видеоинструкции").font(.title3.weight(.semibold))
                 ForEach(items) { InstructionVideoCard(instruction: $0) }
                 Divider()
             }.padding(.vertical, 8)
+          }
         }
     }
 }
@@ -243,73 +259,26 @@ struct AppInstructionsBlock: View {
 struct InstructionsView: View {
     private let preview: Bool
     @StateObject private var catalog: InstructionCatalog
+    @StateObject private var appCatalog: DzhabaCatalogModel
     @State private var search = ""
-    @State private var scope = 0
     init(preview: Bool = false) {
         self.preview = preview
         _catalog = StateObject(wrappedValue: preview ? InstructionCatalog(preview: true) : .shared)
+        _appCatalog = StateObject(wrappedValue: DzhabaCatalogModel(preview: preview))
     }
-
-    private var filtered: [StoreInstruction] {
-        catalog.instructions.filter { item in
-            (scope == 0 || item.section == (scope == 1 ? "general" : scope == 2 ? "apps" : "games"))
-                && (search.isEmpty || (item.title + " " + item.description).localizedCaseInsensitiveContains(search))
-        }.sorted { sectionOrder($0.section) < sectionOrder($1.section) }
+    private var apps: [InstructionAppSummary] {
+        (appCatalog.repository?.apps ?? []).compactMap { app in
+            guard let id = app.id else { return nil }
+            return InstructionAppSummary(id: id, name: app.currentName, iconURL: app.iconURL)
+        }
     }
-
-    private func sectionOrder(_ section: String) -> Int { section == "general" ? 0 : section == "games" ? 2 : 1 }
-
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("Короткие видео помогут разобраться с установкой и настройкой приложений.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Picker("Тип инструкций", selection: $scope) {
-                        Text("Все").tag(0); Text("Общие").tag(1); Text("Приложения").tag(2); Text("Игры").tag(3)
-                    }.pickerStyle(.segmented)
-                    if let error = catalog.error {
-                        Text(error).font(.footnote).foregroundStyle(.secondary)
-                        Button("Обновить") { Task { await catalog.load(force: true) } }
-                    }
-                    if catalog.isLoading && catalog.instructions.isEmpty { ProgressView().frame(maxWidth: .infinity) }
-                    else if filtered.isEmpty {
-                        VStack(spacing: 10) {
-                            Image(systemName: "play.rectangle").font(.largeTitle).foregroundStyle(.secondary)
-                            Text(search.isEmpty ? "Здесь появятся инструкции" : "Ничего не найдено").font(.headline)
-                        }.frame(maxWidth: .infinity).padding(.vertical, 50)
-                    }
-                    ForEach(filtered) { item in
-                        if filtered.first(where: { $0.section == item.section })?.id == item.id {
-                            Text(item.section == "games" ? "Установка игр" : item.section == "general" ? "Общие инструкции" : "Для приложений")
-                                .font(.title3.weight(.semibold)).padding(.top, 6)
-                        }
-                        NavigationLink {
-                            ScrollView { InstructionVideoCard(instruction: item).padding() }
-                                .navigationTitle("Инструкция").navigationBarTitleDisplayMode(.inline)
-                        } label: {
-                            HStack(spacing: 14) {
-                                LazyImage(url: item.cover_url) { state in
-                                    if let image = state.image { image.resizable().scaledToFill() }
-                                    else { Color.secondary.opacity(0.12) }
-                                }.frame(width: 76, height: 98).clipped().clipShape(RoundedRectangle(cornerRadius: 12))
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.title).font(.headline).foregroundStyle(.primary)
-                                    Text(item.is_test ? "Тестовое видео" : (item.section == "games" ? "Установка игры" : item.section == "general" ? "Общая инструкция" : "Для приложения"))
-                                        .font(.caption).foregroundStyle(.secondary)
-                                    Text(item.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                            }.padding(12).background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
-                        }.buttonStyle(.plain)
-                    }
-                }.padding()
-            }
-            .navigationTitle("Инструкции")
-            .searchable(text: $search, prompt: "Найти инструкцию")
-            .refreshable { await catalog.load(force: true) }
-            .task { if !preview { await catalog.load() } }
+            ScrollView { InstructionLibraryContent(catalog: catalog, apps: apps, search: search) }
+                .navigationTitle("Инструкции")
+                .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Найти видео")
+                .refreshable { await catalog.load(force: true); await appCatalog.load() }
+                .task { if !preview { await catalog.load(); await appCatalog.load() } }
         }
     }
 }

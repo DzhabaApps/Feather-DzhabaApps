@@ -69,7 +69,7 @@ struct SourceAppsDetailView: View {
 					Divider()
 				}
 				if let bundleID = app.id {
-					AppInstructionsBlock(bundleID: bundleID, excludingIDs: Set((app.additionalFiles ?? []).compactMap(\.instructionID)))
+					AppInstructionsBlock(bundleID: bundleID, excludingIDs: Set((app.additionalFiles ?? []).compactMap(\.instructionID)), appName: app.currentName, iconURL: app.iconURL)
 				}
 				if let screenshotURLs = app.screenshotURLs, !screenshotURLs.isEmpty {
 					NBSection(.localized("Screenshots")) {

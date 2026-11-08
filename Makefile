@@ -13,6 +13,8 @@ all:
 full: verify preview-screenshots $(PLATFORMS)
 
 verify:
+	xcrun swiftc Feather/Backend/Observable/InstructionCatalog.swift Feather/Backend/Observable/InstructionCollections.swift tools/instruction-collection-tests/main.swift -o /tmp/dr-instruction-collections-check
+	/tmp/dr-instruction-collections-check
 	python3 tools/check_catalog_files.py
 	python3 tools/check_ocsp.py
 	xcrun swiftc -parse-as-library Feather/Backend/Observable/InstructionCatalog.swift tools/instruction-catalog-tests/check.swift -o /tmp/dr-instruction-catalog-check

@@ -88,6 +88,36 @@ final class NativePlayerUITests: XCTestCase {
         wait("Native fullscreen did not return inline") { self.state()["fullscreen"] as? Bool == false }
         if wasPlaying { setPlaying(true) }
     }
+    func testInstructionCollections() {
+        continueAfterFailure = false
+        app.launchEnvironment["FIZER_PREVIEW_SCREEN"] = "instruction-library"
+        app.launch()
+        let gta = app.buttons["instruction-collection-app:com.macport.gtav"]
+        XCTAssertTrue(gta.waitForExistence(timeout: 60))
+        XCTAssertTrue(app.buttons["instruction-general-install-app"].exists)
+        XCTAssertTrue(app.buttons["instruction-collection-family:whatsapp"].exists)
+        Thread.sleep(forTimeInterval: 3)
+        snapshot("DR-Store-instruction-collections-home")
+        gta.tap()
+        let video = app.buttons["instruction-video-gta-v-install"]
+        XCTAssertTrue(video.waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 2)
+        snapshot("DR-Store-instruction-collections-gta")
+        video.tap()
+        XCTAssertTrue(app.buttons["instruction-start"].waitForExistence(timeout: 15))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(video.waitForExistence(timeout: 10))
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(gta.waitForExistence(timeout: 10))
+        let search = app.searchFields.firstMatch
+        if !search.exists { app.swipeDown() }
+        XCTAssertTrue(search.waitForExistence(timeout: 10))
+        search.tap(); search.typeText("WhatsApp")
+        wait("Search did not filter application collections") { !gta.exists }
+        XCTAssertTrue(app.buttons["instruction-collection-family:whatsapp"].exists)
+        snapshot("DR-Store-instruction-collections-search")
+    }
+
     func testSystemPlayer() {
         continueAfterFailure = false
         app.launchEnvironment["FIZER_PREVIEW_SCREEN"] = "instruction-detail"

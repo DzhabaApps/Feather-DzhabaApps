@@ -92,6 +92,7 @@ struct FeatherApp: App {
 	private func _previewScreen(_ screen: String) -> some View {
 		switch screen {
 		case "instructions": InstructionsView(preview: true)
+		case "instruction-library": InstructionsView()
 		case "instruction-detail": NavigationStack { ScrollView { InstructionVideoCard(instruction: .sample).padding() }.navigationTitle("Инструкция").navigationBarTitleDisplayMode(.inline) }
 		case "instruction-check": InstructionPlaybackPreviewView()
 		case "about": AboutView()
