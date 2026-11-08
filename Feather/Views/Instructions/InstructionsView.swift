@@ -222,14 +222,32 @@ struct InstructionVideoCard: View {
 
 struct AppInstructionsBlock: View {
     let bundleID: String
+    var excludingIDs: Set<String> = []
     @ObservedObject private var catalog = InstructionCatalog.shared
+    private var items: [StoreInstruction] { catalog.forApp(bundleID).filter { !excludingIDs.contains($0.id) } }
     var body: some View {
-        if !catalog.forApp(bundleID).isEmpty {
+        if !items.isEmpty {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Видеоинструкции").font(.title3.weight(.semibold))
-                ForEach(catalog.forApp(bundleID)) { InstructionVideoCard(instruction: $0) }
+                ForEach(items) { InstructionVideoCard(instruction: $0) }
                 Divider()
             }.padding(.vertical, 8)
+        }
+    }
+}
+
+struct AdditionalFileVideoLink: View {
+    let instructionID: String
+    @ObservedObject private var catalog = InstructionCatalog.shared
+    var body: some View {
+        if let instruction = catalog.instructions.first(where: { $0.id == instructionID }) {
+            NavigationLink {
+                ScrollView { InstructionVideoCard(instruction: instruction).padding() }
+                    .navigationTitle("Инструкция").navigationBarTitleDisplayMode(.inline)
+            } label: { Label("Видеоинструкция по установке", systemImage: "play.rectangle") }
+        } else {
+            Text("Видеоинструкция пока недоступна. Обновите список инструкций.")
+                .font(.footnote).foregroundStyle(.secondary)
         }
     }
 }
@@ -246,10 +264,12 @@ struct InstructionsView: View {
 
     private var filtered: [StoreInstruction] {
         catalog.instructions.filter { item in
-            (scope == 0 || (scope == 1 ? item.bundle_ids.isEmpty : !item.bundle_ids.isEmpty))
+            (scope == 0 || item.section == (scope == 1 ? "general" : scope == 2 ? "apps" : "games"))
                 && (search.isEmpty || (item.title + " " + item.description).localizedCaseInsensitiveContains(search))
-        }
+        }.sorted { sectionOrder($0.section) < sectionOrder($1.section) }
     }
+
+    private func sectionOrder(_ section: String) -> Int { section == "general" ? 0 : section == "games" ? 2 : 1 }
 
     var body: some View {
         NavigationStack {
@@ -258,7 +278,7 @@ struct InstructionsView: View {
                     Text("Короткие видео помогут разобраться с установкой и настройкой приложений.")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Picker("Тип инструкций", selection: $scope) {
-                        Text("Все").tag(0); Text("Общие").tag(1); Text("Приложения").tag(2)
+                        Text("Все").tag(0); Text("Общие").tag(1); Text("Приложения").tag(2); Text("Игры").tag(3)
                     }.pickerStyle(.segmented)
                     if let error = catalog.error {
                         Text(error).font(.footnote).foregroundStyle(.secondary)
@@ -272,6 +292,10 @@ struct InstructionsView: View {
                         }.frame(maxWidth: .infinity).padding(.vertical, 50)
                     }
                     ForEach(filtered) { item in
+                        if filtered.first(where: { $0.section == item.section })?.id == item.id {
+                            Text(item.section == "games" ? "Установка игр" : item.section == "general" ? "Общие инструкции" : "Для приложений")
+                                .font(.title3.weight(.semibold)).padding(.top, 6)
+                        }
                         NavigationLink {
                             ScrollView { InstructionVideoCard(instruction: item).padding() }
                                 .navigationTitle("Инструкция").navigationBarTitleDisplayMode(.inline)
@@ -283,7 +307,7 @@ struct InstructionsView: View {
                                 }.frame(width: 76, height: 98).clipped().clipShape(RoundedRectangle(cornerRadius: 12))
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(item.title).font(.headline).foregroundStyle(.primary)
-                                    Text(item.is_test ? "Тестовое видео" : (item.bundle_ids.isEmpty ? "Общая инструкция" : "Для приложения"))
+                                    Text(item.is_test ? "Тестовое видео" : (item.section == "games" ? "Установка игры" : item.section == "general" ? "Общая инструкция" : "Для приложения"))
                                         .font(.caption).foregroundStyle(.secondary)
                                     Text(item.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                                 }

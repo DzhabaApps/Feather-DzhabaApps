@@ -39,6 +39,11 @@ struct SourceAppsCellView: View {
 				}
 				DownloadButtonView(app: app)
 			}
+			if !(app.additionalFiles ?? []).isEmpty {
+				Label("Нужны дополнительные файлы", systemImage: "externaldrive")
+					.font(.caption).foregroundStyle(.secondary)
+					.frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 70)
+			}
 			
 			if
 				_storeCellAppearance != 0,
@@ -56,7 +61,7 @@ struct SourceAppsCellView: View {
 	static func appDescription(app: ASRepository.App) -> String {
 		let optionalComponents: [String?] = [
 			app.currentVersion,
-			app.currentDescription ?? .localized("An awesome application")
+			app.currentSize.map { CatalogFileSize.string($0) }
 		]
 		
 		let components: [String] = optionalComponents.compactMap { value in

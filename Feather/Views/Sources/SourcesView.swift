@@ -60,7 +60,13 @@ struct SourcesView: View {
                                 NavigationLink {
                                     SourceAppsDetailView(source: source, app: app)
                                 } label: {
-                                    FRIconCellView(title: app.currentName, subtitle: SourceAppsCellView.appDescription(app: app), iconUrl: app.iconURL)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        FRIconCellView(title: app.currentName, subtitle: SourceAppsCellView.appDescription(app: app), iconUrl: app.iconURL)
+                                        if !(app.additionalFiles ?? []).isEmpty {
+                                            Label("Нужны дополнительные файлы", systemImage: "externaldrive")
+                                                .font(.caption).foregroundStyle(.secondary).padding(.leading, 70)
+                                        }
+                                    }
                                 }.buttonStyle(.plain)
                                 DownloadButtonView(app: app)
                             }.padding(.vertical, 2)

@@ -67,7 +67,26 @@ struct SourceAppsDetailView: View {
 				_infoPills(app: app)
 				Divider()
                 
-				if let bundleID = app.id { AppInstructionsBlock(bundleID: bundleID) }
+				if let files = app.additionalFiles, !files.isEmpty {
+					VStack(alignment: .leading, spacing: 14) {
+						Text("Дополнительные файлы").font(.title3.weight(.semibold))
+						Text("Для работы приложения нужны дополнительные данные. После скачивания переместите их в папку, указанную в видеоинструкции.")
+							.font(.subheadline).foregroundStyle(.secondary)
+						ForEach(Array(files.enumerated()), id: \.offset) { _, file in
+							VStack(alignment: .leading, spacing: 6) {
+								Text(file.name).font(.headline)
+								Text(CatalogFileSize.string(file.size)).font(.subheadline).foregroundStyle(.secondary)
+								Link(destination: file.url) { Label("Скачать файл", systemImage: "arrow.up.right.square") }
+									.buttonStyle(.bordered)
+								if let id = file.instructionID { AdditionalFileVideoLink(instructionID: id) }
+							}
+						}
+					}.padding(.vertical, 8)
+					Divider()
+				}
+				if let bundleID = app.id {
+					AppInstructionsBlock(bundleID: bundleID, excludingIDs: Set((app.additionalFiles ?? []).compactMap(\.instructionID)))
+				}
 				if let screenshotURLs = app.screenshotURLs, !screenshotURLs.isEmpty {
 					NBSection(.localized("Screenshots")) {
 						_screenshots(screenshotURLs: screenshotURLs)
@@ -113,7 +132,7 @@ struct SourceAppsDetailView: View {
                 
 				NBSection(.localized("Information")) {
 					VStack(spacing: 12) {
-						if let size = app.size {
+						if let size = app.currentSize {
 							_infoRow(title: .localized("Size"), value: size.formattedByteCount)
 						}
 						

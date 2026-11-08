@@ -172,6 +172,18 @@ extension ASRepository {
 		public var size: Int64?
 
 		public var category: String?
+		public var additionalFiles: [AdditionalFile]?
+
+		public struct AdditionalFile: Decodable, Hashable, Sendable {
+			public var name: String
+			public var url: URL
+			public var size: Int64
+			public var instructionID: String?
+			public var isValid: Bool {
+				url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil
+					&& !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && size > 0
+			}
+		}
 
 		public var beta: Bool?
 
@@ -272,6 +284,8 @@ extension ASRepository {
 				String.self,
 				forKey: .category
 			)
+			self.additionalFiles = (try? container.decode([AdditionalFile].self, forKey: .additionalFiles))
+				.map { Array($0.filter { $0.isValid }.prefix(5)) }
 
 			self.beta =
 				(try? container.decodeIfPresent(Bool.self, forKey: .beta)) ?? false
@@ -348,7 +362,7 @@ extension ASRepository {
 			case name, subtitle, description
 			case developer = "developerName"
 			case versions, version, versionDate, date, versionDescription, downloadURL,
-			     localizedDescription, iconURL, tintColor, size, category, beta
+			     localizedDescription, iconURL, tintColor, size, category, beta, additionalFiles
 			case permissions, appPermissions
 			case screenshots, screenshotURLs
 			case marketplaceID
@@ -372,6 +386,11 @@ extension ASRepository {
 		
 		public var currentVersion: String? {
 			currentAppVersion?.version ?? version
+		}
+
+		public var currentSize: Int64? {
+			if let bytes = currentAppVersion?.size, bytes > 0, let value = Int64(exactly: bytes) { return value }
+			return size.flatMap { $0 > 0 ? $0 : nil }
 		}
 		
 		public var currentDownloadUrl: URL? {

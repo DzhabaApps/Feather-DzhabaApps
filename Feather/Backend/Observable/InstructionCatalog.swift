@@ -11,6 +11,9 @@ struct StoreInstruction: Codable, Identifiable, Equatable {
     let cover_url: URL
     let aspect_ratio: Double
     let is_test: Bool
+    var group: String? = nil
+
+    var section: String { group ?? (bundle_ids.isEmpty ? "general" : "apps") }
 
     static let sample = StoreInstruction(
         id: "technical-playback-test", title: "Знакомство с видеоинструкциями",
@@ -47,6 +50,7 @@ struct InstructionIndex: Codable {
                   && item.steps.allSatisfy({ $0.count <= 1000 }) && item.bundle_ids.count <= 100
                   && item.aspect_ratio.isFinite && (0.2...5).contains(item.aspect_ratio)
                   && StoreInstruction.isTrusted(item.video_url) && StoreInstruction.isTrusted(item.cover_url)
+                  && (item.group == nil || ["general", "apps", "games"].contains(item.group!))
               }) else { throw URLError(.cannotParseResponse) }
         return index
     }
