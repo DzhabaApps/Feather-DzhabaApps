@@ -64,6 +64,12 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                     ($0.state == .running || $0.state == .suspended) && self.block($0)?.id == saved.id
                 }
                 self.working = self.task != nil
+                if let task = self.task, let block = self.block(task) {
+                    self.received = block.range.lowerBound + min(task.countOfBytesReceived,
+                        block.range.upperBound - block.range.lowerBound + 1)
+                    self.beginProgress(title: saved.name)
+                    self.showProgress()
+                }
             }
         }
     }
@@ -86,6 +92,12 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         }
         directURL = nil
         refreshedExpiredLink = false
+        beginProgress(title: title)
+        showProgress()
+        resolve(share: share)
+    }
+
+    private func beginProgress(title: String) {
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.startTask(for: progressID, filename: title) { [weak self] in
@@ -93,8 +105,6 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
             }
         }
         #endif
-        showProgress()
-        resolve(share: share)
     }
 
     func discard() {
