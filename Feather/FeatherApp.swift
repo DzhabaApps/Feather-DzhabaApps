@@ -149,9 +149,11 @@ struct FeatherApp: App {
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
-        // Only retired v1/v2 daemon sessions can send these events now.
-        // New transfers run in-process; their files are persisted by the delegate.
-        completionHandler()
+        if identifier == GameDataDownload.sessionID {
+            GameDataDownload.shared.handleSystemEvents(completionHandler)
+        } else {
+            completionHandler()
+        }
     }
 	func application(
 		_ application: UIApplication,

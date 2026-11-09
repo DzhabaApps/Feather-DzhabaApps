@@ -13,6 +13,8 @@ all:
 full: verify preview-screenshots $(PLATFORMS)
 
 verify:
+	xcrun swiftc Feather/Backend/Observable/GameDataSource.swift tools/game-data-tests/main.swift -o /tmp/dr-game-data-check
+	/tmp/dr-game-data-check
 	xcrun swiftc Feather/Backend/Observable/InstructionCatalog.swift Feather/Backend/Observable/InstructionCollections.swift tools/instruction-collection-tests/main.swift -o /tmp/dr-instruction-collections-check
 	/tmp/dr-instruction-collections-check
 	python3 tools/check_catalog_files.py

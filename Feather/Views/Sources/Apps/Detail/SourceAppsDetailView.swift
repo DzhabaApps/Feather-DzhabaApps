@@ -65,7 +65,7 @@ struct SourceAppsDetailView: View {
 				Divider()
                 
 				if let files = app.additionalFiles, !files.isEmpty {
-					AppAdditionalFilesView(files: files)
+					AppAdditionalFilesView(files: files, allowsGameData: app.id == "com.macport.gtav")
 					Divider()
 				}
 				if let bundleID = app.id {
