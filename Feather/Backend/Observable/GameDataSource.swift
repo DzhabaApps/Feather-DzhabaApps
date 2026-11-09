@@ -10,6 +10,7 @@ enum GameDataSource {
         let type: String
         let name: String
         let size: Int64?
+        let file: URL?
     }
 
     private struct DownloadLink: Decodable {
@@ -41,6 +42,7 @@ enum GameDataSource {
         let metadata = try await fetch(Metadata.self, share: url, endpoint: "")
         guard metadata.type == "file" else { throw Failure.folder }
         guard let size = metadata.size, size > 0, safeName(metadata.name) else { throw Failure.changed }
+        if let file = metadata.file, acceptsDownload(file) { return (metadata, file) }
         let link = try await fetch(DownloadLink.self, share: url, endpoint: "/download")
         guard acceptsDownload(link.href) else { throw URLError(.badServerResponse) }
         return (metadata, link.href)
@@ -73,10 +75,22 @@ enum GameDataSource {
         let expected = "bytes \(range.lowerBound)-\(range.upperBound)/\(size)"
         guard response.statusCode == 206,
               response.value(forHTTPHeaderField: "Content-Range") == expected,
-              let etag = response.value(forHTTPHeaderField: "ETag"),
-              etag.hasPrefix("\""), etag.hasSuffix("\"") else { throw URLError(.badServerResponse) }
-        guard previous == nil || previous == etag else { throw Failure.changed }
+              let etag = response.value(forHTTPHeaderField: "ETag"), let identity = tagIdentity(etag) else {
+            throw URLError(.badServerResponse)
+        }
+        guard previous == nil || previous.flatMap(tagIdentity) == identity else { throw Failure.changed }
         return etag
+    }
+
+    private static func tagIdentity(_ tag: String) -> String? {
+        if tag.count > 2, tag.hasPrefix("\""), tag.hasSuffix("\"") {
+            return String(tag.dropFirst().dropLast())
+        }
+        // Yandex's storage returns an unquoted hexadecimal object identifier.
+        guard tag.count == 32, tag.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+            return nil
+        }
+        return tag
     }
 
     enum Failure: LocalizedError {

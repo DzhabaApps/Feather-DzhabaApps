@@ -36,15 +36,19 @@ enum GameArchive {
         var entries: [(Entry, [String])] = []
         var paths = Set<String>()
         var total: UInt64 = 0
+        var seen = 0
         for entry in archive {
+            seen += 1
+            guard seen <= expectedCount else { throw Failure.invalid }
             let path = try components(of: entry)
+            if path.first == "__MACOSX" { continue }
             let key = path.joined(separator: "/").precomposedStringWithCanonicalMapping.lowercased()
             let (size, overflow) = total.addingReportingOverflow(entry.uncompressedSize)
-            guard paths.insert(key).inserted, !overflow, entries.count < expectedCount else { throw Failure.invalid }
+            guard paths.insert(key).inserted, !overflow else { throw Failure.invalid }
             total = size
             entries.append((entry, path))
         }
-        guard entries.count == expectedCount, let root = entries.first?.1.first,
+        guard seen == expectedCount, let root = entries.first?.1.first,
               entries.allSatisfy({ $0.1.first == root }),
               entries.contains(where: { $0.0.type == .file && $0.1.count > 1 }) else { throw Failure.invalid }
 

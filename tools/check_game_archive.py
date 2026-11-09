@@ -25,12 +25,14 @@ let package = Package(name: "ArchiveCheck", platforms: [.macOS(.v13)],
     for name, path in [("valid", "GTAV/sub/data"), ("escape", "GTAV/../../escaped"), ("corrupt", "GTAV/data")]:
         with zipfile.ZipFile(fixtures / f"{name}.zip", "w") as archive:
             archive.writestr(path, "game-bytes")
+            if name == "valid":
+                archive.writestr("__MACOSX/GTAV/sub/._data", "metadata")
     corrupt = fixtures / "corrupt.zip"
     corrupt.write_bytes(corrupt.read_bytes().replace(b"game-bytes", b"fake-bytes", 1))
     regular = (fixtures / "valid.zip").read_bytes()
     end = len(regular) - 22
     directory_size, directory_offset = struct.unpack_from("<II", regular, end + 12)
-    extended = struct.pack("<IQHHIIQQQQ", 0x06064B50, 44, 45, 45, 0, 0, 1, 1, directory_size, directory_offset)
+    extended = struct.pack("<IQHHIIQQQQ", 0x06064B50, 44, 45, 45, 0, 0, 2, 2, directory_size, directory_offset)
     locator = struct.pack("<IIQI", 0x07064B50, 0, end, 1)
     footer = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0)
     (fixtures / "zip64.zip").write_bytes(regular[:end] + extended + locator + footer)
@@ -48,6 +50,7 @@ func install(_ name: String, replacing: Bool = false) throws {
 try install("zip64")
 let data = try String(contentsOf: game.appendingPathComponent("sub/data"), encoding: .utf8)
 precondition(data == "game-bytes")
+precondition(!FileManager.default.fileExists(atPath: target.appendingPathComponent("__MACOSX").path))
 do {
     try install("valid")
     fatalError("Overwrote an existing folder without permission")

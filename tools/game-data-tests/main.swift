@@ -32,6 +32,9 @@ let last = (size - 4)...(size - 1)
 let header = "bytes \(last.lowerBound)-\(last.upperBound)/\(size)"
 let accepted = try GameDataSource.checkedETag(response(206, header, etag), range: last, size: size, previous: etag)
 precondition(accepted == etag)
+let yandexTag = "5f6118941202525a4e6c14e13069b26e"
+let yandexAccepted = try GameDataSource.checkedETag(response(206, header, yandexTag), range: last, size: size, previous: "\"" + yandexTag + "\"")
+precondition(yandexAccepted == yandexTag)
 for invalid in [response(200, header, etag), response(206, "bytes 0-3/4", etag),
                 response(206, header, "\"archive-v2\""), response(206, header, "W/" + etag),
                 response(412, header, etag)] {
