@@ -3,8 +3,8 @@ import Combine
 import UIKit
 
 /// One GTA data download. The background session writes each range to disk.
-/// The assembled file and its identity survive a relaunch.
-final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDelegate {
+/// The assembled file and its identity survive a relaunch. State and delegate callbacks run on the main queue.
+final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDelegate, @unchecked Sendable {
     static let shared = GameDataDownload()
     static let sessionID = (Bundle.main.bundleIdentifier ?? "Feather") + ".game-data"
 
@@ -56,8 +56,11 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         working = true
         session.getAllTasks { [weak self] tasks in
             DispatchQueue.main.async {
-                guard let self, self.transfer?.id == saved.id, self.task == nil, self.resolution == nil else { return }
-                self.task = tasks.compactMap { $0 as? URLSessionDownloadTask }.first { self.block($0)?.id == saved.id }
+                guard let self, self.working, self.transfer?.id == saved.id, self.task == nil,
+                      self.resolution == nil else { return }
+                self.task = tasks.compactMap { $0 as? URLSessionDownloadTask }.first {
+                    ($0.state == .running || $0.state == .suspended) && self.block($0)?.id == saved.id
+                }
                 self.working = self.task != nil
             }
         }
@@ -142,7 +145,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     private func enqueueBlock() throws {
         guard let transfer, let directURL,
               let range = GameDataSource.range(from: length(of: payload(transfer)), size: transfer.size) else {
-            throw URLError(.cannotResume)
+            throw URLError(.badServerResponse)
         }
         var request = URLRequest(url: directURL)
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")

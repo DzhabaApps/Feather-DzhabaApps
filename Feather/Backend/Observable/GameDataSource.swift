@@ -52,10 +52,13 @@ enum GameDataSource {
         components.host = "cloud-api.yandex.net"
         components.path = "/v1/disk/public/resources" + endpoint
         components.queryItems = [URLQueryItem(name: "public_key", value: share.absoluteString)]
-        let request = URLRequest(url: components.url!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
+        guard let url = components.url else { throw URLError(.badURL) }
+        let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+        guard let http = response as? HTTPURLResponse,
               http.url?.host == components.host else { throw URLError(.badServerResponse) }
+        if http.statusCode == 429 { throw Failure.rateLimited }
+        guard http.statusCode == 200 else { throw URLError(.badServerResponse) }
         return try JSONDecoder().decode(type, from: data)
     }
 
@@ -77,12 +80,13 @@ enum GameDataSource {
     }
 
     enum Failure: LocalizedError {
-        case folder, changed
+        case folder, changed, rateLimited
 
         var errorDescription: String? {
             switch self {
             case .folder: return "Для загрузки нужна ссылка на один файл, например ZIP."
             case .changed: return "Файл на Яндекс Диске изменился. Удали старую загрузку и начни заново."
+            case .rateLimited: return "Яндекс Диск временно ограничил выдачу ссылок. Попробуй чуть позже."
             }
         }
     }
