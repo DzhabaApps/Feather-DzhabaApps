@@ -14,6 +14,8 @@ struct InstructionCollection: Identifiable, Equatable {
 }
 
 enum InstructionCollections {
+    static let generalID = "general"
+
     static func key(for bundleID: String) -> String {
         let id = bundleID.lowercased()
         if id.hasPrefix("net.whatsapp.") { return "family:whatsapp" }
@@ -53,9 +55,12 @@ enum InstructionCollections {
                 if icons[id] == nil, let url = summary?.iconURL { icons[id] = url }
             }
         }
-        return items.map { id, videos in
+        let collections = items.map { id, videos in
             InstructionCollection(id: id, title: labels[id] ?? "Инструкции приложения", iconURL: icons[id], instructions: videos)
         }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let general = instructions.filter(isGeneral)
+        guard !general.isEmpty else { return collections }
+        return [InstructionCollection(id: generalID, title: "Общие инструкции", iconURL: nil, instructions: general)] + collections
     }
 
     static func countLabel(_ count: Int) -> String { "\(count) видео" }

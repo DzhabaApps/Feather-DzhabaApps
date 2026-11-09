@@ -21,6 +21,7 @@ with log.open('w') as stream:
   '-skipPackagePluginValidation','CODE_SIGNING_ALLOWED=NO','DEPLOYMENT_LOCATION=NO',
   'ONLY_ACTIVE_ARCH=YES','ARCHS='+platform.machine()],cwd=root,stdout=stream,stderr=subprocess.STDOUT)
 attachments=pathlib.Path('/tmp/DRStoreCollectionAttachments')
+screenshots = ['home', 'general', 'gta', 'search']
 if result.exists():
  subprocess.run(['xcrun','xcresulttool','export','attachments','--path',str(result),'--output-path',str(attachments)],check=False)
  if attachments.exists():
@@ -30,14 +31,14 @@ if result.exists():
    for test in json.loads(manifest.read_text()):
     for attachment in test.get('attachments',[]):
      suggested=attachment.get('suggestedHumanReadableName','')
-     for label in ['home','gta','search']:
+     for label in screenshots:
       if suggested.startswith('DR-Store-instruction-collections-'+label+'_'):
        shutil.copy2(attachments/attachment['exportedFileName'],output/('DR-Store-instruction-collections-'+label+'.png'))
 if proc.returncode:
  lines=log.read_text(errors='replace').splitlines()
  print('\n'.join(l for l in lines if 'error:' in l.lower() or 'failed' in l.lower())[-6000:],flush=True)
  raise RuntimeError('Native collection navigation test failed; see diagnostics')
-assert all((output/('DR-Store-instruction-collections-'+name+'.png')).exists() for name in ['home','gta','search'])
+assert all((output/('DR-Store-instruction-collections-'+name+'.png')).exists() for name in screenshots)
 (output/'Instruction-collections-validation.json').write_text(json.dumps({'passed':True,'method':'XCTest actual native taps',
  'scenarios':['published general videos','GTA collection','WhatsApp collection','video screen','back navigation','search'],
  'physical_installation':'pending'},indent=2))

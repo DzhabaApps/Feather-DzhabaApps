@@ -94,10 +94,19 @@ final class NativePlayerUITests: XCTestCase {
         app.launch()
         let gta = app.buttons["instruction-collection-app:com.macport.gtav"]
         XCTAssertTrue(gta.waitForExistence(timeout: 60))
-        XCTAssertTrue(app.buttons["instruction-general-install-app"].exists)
+        let general = app.buttons["instruction-collection-general"]
+        XCTAssertTrue(general.exists)
+        XCTAssertFalse(app.buttons["instruction-video-install-app"].exists)
         XCTAssertTrue(app.buttons["instruction-collection-family:whatsapp"].exists)
         Thread.sleep(forTimeInterval: 3)
         snapshot("DR-Store-instruction-collections-home")
+        general.tap()
+        XCTAssertTrue(app.buttons["instruction-video-install-app"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["instruction-video-create-copy"].exists)
+        Thread.sleep(forTimeInterval: 2)
+        snapshot("DR-Store-instruction-collections-general")
+        app.navigationBars.buttons.firstMatch.tap()
+        XCTAssertTrue(gta.waitForExistence(timeout: 10))
         gta.tap()
         let video = app.buttons["instruction-video-gta-v-install"]
         XCTAssertTrue(video.waitForExistence(timeout: 15))
