@@ -120,7 +120,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         }
     }
 
-    private func pause() {
+    func pause() {
         resolution?.cancel()
         resolution = nil
         task?.cancel()

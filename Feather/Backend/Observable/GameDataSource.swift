@@ -6,14 +6,16 @@ import FoundationNetworking
 enum GameDataSource {
     static let blockSize: Int64 = 256 * 1024 * 1024
 
+    static func byteCount(_ bytes: Int64) -> String {
+        let gigabytes = bytes >= 1_000_000_000
+        let value = Double(max(0, bytes)) / (gigabytes ? 1_000_000_000 : 1_000_000)
+        let number = value.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "ru_RU")))
+        return "\(number) \(gigabytes ? "ГБ" : "МБ")"
+    }
+
     static func progressText(received: Int64, total: Int64) -> String {
-        func format(_ bytes: Int64) -> String {
-            let gigabytes = bytes >= 1_000_000_000
-            let value = Double(max(0, bytes)) / (gigabytes ? 1_000_000_000 : 1_000_000)
-            let number = value.formatted(.number.precision(.fractionLength(0...2)).locale(Locale(identifier: "ru_RU")))
-            return "\(number) \(gigabytes ? "ГБ" : "МБ")"
-        }
-        return "\(format(min(received, total))) из \(format(total))"
+        guard total > 0 else { return byteCount(received) }
+        return "\(byteCount(min(received, total))) из \(byteCount(total))"
     }
 
     struct Metadata: Decodable {

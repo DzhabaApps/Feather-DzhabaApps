@@ -46,13 +46,11 @@ struct SourceAppsDetailView: View {
 						standardIcon
 					}
 
-					VStack(alignment: .leading, spacing: 2) {
+					VStack(alignment: .leading, spacing: 10) {
 						Text(app.currentName)
 							.font(.title2)
 							.fontWeight(.semibold)
 							.foregroundColor(.primary)
-						
-						Spacer()
 						
 						DownloadButtonView(app: app)
 					}

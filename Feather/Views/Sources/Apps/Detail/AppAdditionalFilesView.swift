@@ -49,7 +49,7 @@ struct AdditionalFileTitle: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(file.name).font(.headline).foregroundStyle(.primary)
-            Text(CatalogFileSize.string(file.size)).font(.subheadline).foregroundStyle(.secondary)
+            Text(GameDataSource.byteCount(file.size)).font(.subheadline).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }

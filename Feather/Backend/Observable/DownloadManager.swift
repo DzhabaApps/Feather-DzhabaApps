@@ -290,9 +290,15 @@ class DownloadManager: NSObject, ObservableObject {
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.startTask(for: download.id, filename: download.displayName)
-            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress, stage: "Загрузка")
+            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress,
+                stage: downloadStage(download))
         }
         #endif
+    }
+
+    private func downloadStage(_ download: Download) -> String {
+        guard download.bytesDownloaded > 0 || download.totalBytes > 0 else { return "Загрузка" }
+        return GameDataSource.progressText(received: download.bytesDownloaded, total: download.totalBytes)
     }
     func isManualDownload(_ id: String) -> Bool { id.contains("FeatherManualDownload") }
     func getDownload(by id: String) -> Download? { downloads.first { $0.id == id } }
@@ -403,7 +409,10 @@ extension DownloadManager: URLSessionDownloadDelegate {
         download.bytesDownloaded = totalBytesWritten
         download.totalBytes = totalBytesExpectedToWrite
         #if !targetEnvironment(macCatalyst)
-        if #available(iOS 26.0, *) { BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress, stage: "Загрузка") }
+        if #available(iOS 26.0, *) {
+            BackgroundTaskManager.shared.updateProgress(for: download.id, progress: download.overallProgress,
+                stage: downloadStage(download))
+        }
         #endif
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

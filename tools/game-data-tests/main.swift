@@ -14,6 +14,8 @@ precondition(GameDataSource.safeName("GTAV"))
 precondition(GameDataSource.safeName("GTAV.zip"))
 precondition(GameDataSource.progressText(received: 215_000_000, total: 21_055_817_375) == "215 МБ из 21,06 ГБ")
 precondition(GameDataSource.progressText(received: 3_420_000_000, total: 21_055_817_375) == "3,42 ГБ из 21,06 ГБ")
+precondition(GameDataSource.byteCount(21_055_817_375) == "21,06 ГБ")
+precondition(GameDataSource.progressText(received: 23_000_000, total: -1) == "23 МБ")
 precondition(!GameDataSource.safeName("../GTAV"))
 precondition(!GameDataSource.safeName("folder\\GTAV"))
 

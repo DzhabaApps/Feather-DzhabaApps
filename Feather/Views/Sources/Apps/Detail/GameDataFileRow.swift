@@ -24,8 +24,13 @@ struct GameDataFileRow: View {
                 AdditionalFileTitle(file: file)
                 if download.transfer != nil || download.working {
                     Menu {
+                        if download.working {
+                            Button { download.pause() } label: {
+                                Label("Пауза", systemImage: "pause")
+                            }
+                        }
                         Button(role: .destructive) { confirmDelete = true } label: {
-                            Label("Удалить загрузку", systemImage: "trash")
+                            Label(download.ready ? "Удалить файл" : "Отменить загрузку", systemImage: "trash")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle").font(.title3)
@@ -70,8 +75,13 @@ struct GameDataFileRow: View {
         }
         .padding(16)
         .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
-        .confirmationDialog("Удалить скачанную часть с iPhone?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Удалить", role: .destructive) { saveError = nil; download.discard() }
+        .confirmationDialog(download.ready ? "Удалить скачанный файл?" : "Отменить загрузку и удалить скачанную часть?",
+                            isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button(download.ready ? "Удалить" : "Отменить загрузку", role: .destructive) {
+                saveError = nil
+                download.discard()
+            }
+            Button("Назад", role: .cancel) {}
         }
         .confirmationDialog("Заменить существующую папку?", isPresented: $confirmReplace, titleVisibility: .visible) {
             Button("Заменить", role: .destructive) {

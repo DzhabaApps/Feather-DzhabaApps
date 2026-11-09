@@ -64,8 +64,8 @@ struct DownloadItemView: View {
 				Text(verbatim: "\(progress >= 1 ? "Подготовка · " : "")\(Int(overallProgress * 100))%")
 					.contentTransition(.numericText())
 				Spacer()
-				if totalBytes > 0 {
-					Text(verbatim: "\($bytesDownloaded.wrappedValue.formattedByteCount) / \(totalBytes.formattedByteCount)")
+				if totalBytes > 0 || bytesDownloaded > 0 {
+					Text(verbatim: GameDataSource.progressText(received: bytesDownloaded, total: totalBytes))
 						.contentTransition(.numericText())
 				}
 			}
