@@ -179,6 +179,7 @@ extension ASRepository {
 			public var url: URL
 			public var size: Int64
 			public var instructionID: String?
+			public var extractArchive: Bool?
 			public var isValid: Bool {
 				url.scheme == "https" && url.host != nil && url.user == nil && url.password == nil
 					&& !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && size > 0

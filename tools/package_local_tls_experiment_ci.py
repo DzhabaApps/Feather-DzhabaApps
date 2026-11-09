@@ -5,7 +5,10 @@ import pathlib
 import subprocess
 
 instruction_branches = {'refs/heads/codex/instruction-collections-20261109', 'refs/heads/codex/instruction-folder-rows-20261109'}
-assert os.environ.get('GITHUB_REF') in instruction_branches | {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish','refs/heads/codex/final-2-0','refs/heads/codex/startup-and-instructions','refs/heads/codex/catalog-files-build-20261108','refs/heads/codex/compact-game-detail-20261109','refs/heads/codex/gta-game-data-download'}, 'Candidate packaging is restricted to its own branch'
+archive_branch = 'refs/heads/codex/gta-game-data-unpack'
+assert os.environ.get('GITHUB_REF') in instruction_branches | {'refs/heads/codex/semi-local-main','refs/heads/codex/install-completion-polish','refs/heads/codex/final-2-0','refs/heads/codex/startup-and-instructions','refs/heads/codex/catalog-files-build-20261108','refs/heads/codex/compact-game-detail-20261109','refs/heads/codex/gta-game-data-download',archive_branch}, 'Candidate packaging is restricted to its own branch'
+if os.environ.get('GITHUB_REF') == archive_branch:
+    subprocess.run(['python3', 'tools/check_game_archive.py'], check=True)
 subprocess.run(['make', 'verify', 'iphoneos'], check=True)
 if os.environ.get('GITHUB_REF') == 'refs/heads/codex/compact-game-detail-20261109':
     subprocess.run(['python3','tools/check_compact_game_ui.py'],check=True)

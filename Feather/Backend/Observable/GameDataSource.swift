@@ -36,11 +36,11 @@ enum GameDataSource {
             && !name.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
     }
 
-    static func resolve(_ url: URL, size: Int64) async throws -> (Metadata, URL) {
+    static func resolve(_ url: URL) async throws -> (Metadata, URL) {
         guard accepts(url) else { throw URLError(.unsupportedURL) }
         let metadata = try await fetch(Metadata.self, share: url, endpoint: "")
         guard metadata.type == "file" else { throw Failure.folder }
-        guard metadata.size == size, safeName(metadata.name) else { throw Failure.changed }
+        guard let size = metadata.size, size > 0, safeName(metadata.name) else { throw Failure.changed }
         let link = try await fetch(DownloadLink.self, share: url, endpoint: "/download")
         guard acceptsDownload(link.href) else { throw URLError(.badServerResponse) }
         return (metadata, link.href)

@@ -24,6 +24,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     @Published private(set) var transfer: Transfer?
     @Published private(set) var received: Int64 = 0
     @Published private(set) var working = false
+    @Published private(set) var installing = false
     @Published private(set) var error: String?
 
     private let files = FileManager.default
@@ -76,18 +77,19 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         return payload(transfer)
     }
 
-    func start(share: URL, size: Int64) {
-        guard !working, !ready, GameDataSource.accepts(share), size > 0 else { return }
-        if let transfer, transfer.share != share || transfer.size != size {
+    func start(share: URL) {
+        guard !working, !ready, GameDataSource.accepts(share) else { return }
+        if let transfer, transfer.share != share {
             error = "Сначала удали прежнюю загрузку."
             return
         }
         directURL = nil
         refreshedExpiredLink = false
-        resolve(share: share, size: size)
+        resolve(share: share)
     }
 
     func discard() {
+        guard !installing else { return }
         resolution?.cancel()
         resolution = nil
         task?.cancel()
@@ -105,13 +107,27 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         completeSystemEvents()
     }
 
+    @MainActor
+    func saveFolder(to destination: URL, replacing: Bool) async throws {
+        guard !installing, let source = exportURL, let id = transfer?.id else {
+            throw GameArchive.Failure.destinationUnavailable
+        }
+        installing = true
+        defer { installing = false }
+        try await Task.detached(priority: .userInitiated) {
+            try GameArchive.save(source, in: destination, replacing: replacing, transferID: id)
+        }.value
+        installing = false
+        discard()
+    }
+
     func handleSystemEvents(_ completion: @escaping () -> Void) {
         systemCompletion = completion
         _ = session
         completeSystemEvents()
     }
 
-    private func resolve(share: URL, size: Int64) {
+    private func resolve(share: URL) {
         working = true
         error = nil
         resolution = Task { @MainActor in
@@ -122,10 +138,11 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 }
             }
             do {
-                let (metadata, url) = try await GameDataSource.resolve(share, size: size)
+                let (metadata, url) = try await GameDataSource.resolve(share)
                 try Task.checkCancellation()
+                guard let size = metadata.size else { throw GameDataSource.Failure.changed }
                 if let transfer {
-                    guard transfer.name == metadata.name else { throw GameDataSource.Failure.changed }
+                    guard transfer.name == metadata.name, transfer.size == size else { throw GameDataSource.Failure.changed }
                 } else {
                     var directory = root
                     try files.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -231,7 +248,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
             if [401, 403, 410].contains(response.statusCode), !refreshedExpiredLink {
                 refreshedExpiredLink = true
                 received = length(of: destination)
-                resolve(share: record.share, size: record.size)
+                resolve(share: record.share)
                 return
             }
             let tag = try GameDataSource.checkedETag(response, range: block.range, size: record.size, previous: record.etag)
@@ -249,7 +266,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 working = false
                 directURL = nil
             } else if directURL == nil {
-                resolve(share: record.share, size: record.size)
+                resolve(share: record.share)
             } else {
                 try enqueueBlock()
             }

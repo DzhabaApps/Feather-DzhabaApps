@@ -19,6 +19,7 @@
 		33693A082DC8BF5B00730215 /* AltSourceKit in Frameworks */ = {isa = PBXBuildFile; productRef = 33693A072DC8BF5B00730215 /* AltSourceKit */; };
 		336D43982DB7454A00206400 /* MobileCoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 336D43972DB7454A00206400 /* MobileCoreServices.framework */; };
 		3371F7322DA9ECDD00281AC6 /* Zip in Frameworks */ = {isa = PBXBuildFile; productRef = 3371F7312DA9ECDD00281AC6 /* Zip */; };
+		DA0000000000000000000001 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = DA0000000000000000000002 /* ZIPFoundation */; };
 		33CF13392DB5ACFB0021D4C5 /* SWCompression in Frameworks */ = {isa = PBXBuildFile; productRef = 33CF13382DB5ACFB0021D4C5 /* SWCompression */; };
 		570920BE2F98A4F0008C4A83 /* Feather.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 570920BD2F98A4F0008C4A83 /* Feather.xcconfig */; };
 /* End PBXBuildFile section */
@@ -76,6 +77,7 @@
 				33CF13392DB5ACFB0021D4C5 /* SWCompression in Frameworks */,
 				33693A082DC8BF5B00730215 /* AltSourceKit in Frameworks */,
 				3371F7322DA9ECDD00281AC6 /* Zip in Frameworks */,
+				DA0000000000000000000001 /* ZIPFoundation in Frameworks */,
 				330F69032DC03DF500D8C35D /* NimbleViews in Frameworks */,
 				3305BBAC2DB8944200660D45 /* Vapor in Frameworks */,
 				3346F83B2DC6C6D100C7D508 /* NukeUI in Frameworks */,
@@ -135,6 +137,7 @@
 			name = Feather;
 			packageProductDependencies = (
 				3371F7312DA9ECDD00281AC6 /* Zip */,
+				DA0000000000000000000002 /* ZIPFoundation */,
 				33CF13382DB5ACFB0021D4C5 /* SWCompression */,
 				3305BBAB2DB8944200660D45 /* Vapor */,
 				330F68FB2DBF7C8600D8C35D /* NimbleExtensions */,
@@ -189,6 +192,7 @@
 			packageReferences = (
 				3371F5152DA91FDC00281AC6 /* XCLocalSwiftPackageReference "Zsign" */,
 				3371F6F52DA9EBA500281AC6 /* XCRemoteSwiftPackageReference "Zip" */,
+				DA0000000000000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
 				33CF13372DB5ACFB0021D4C5 /* XCRemoteSwiftPackageReference "SWCompression" */,
 				3305BBAA2DB8944200660D45 /* XCRemoteSwiftPackageReference "vapor" */,
 				330F68FF2DC03DF400D8C35D /* XCLocalSwiftPackageReference "NimbleKit" */,
@@ -584,6 +588,14 @@
 				minimumVersion = 4.8.6;
 			};
 		};
+		DA0000000000000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
+			requirement = {
+				kind = exactVersion;
+				version = 0.9.20;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -643,6 +655,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 33CF13372DB5ACFB0021D4C5 /* XCRemoteSwiftPackageReference "SWCompression" */;
 			productName = SWCompression;
+		};
+		DA0000000000000000000002 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DA0000000000000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -10,7 +10,7 @@ struct AppAdditionalFilesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ForEach(Array(files.enumerated()), id: \.offset) { index, file in
-                if allowsGameData && file.size >= 1024 * 1024 * 1024 && GameDataSource.accepts(file.url) {
+                if GameDataSource.accepts(file.url) && (file.extractArchive == true || (allowsGameData && file.size >= 1024 * 1024 * 1024)) {
                     GameDataFileRow(file: file)
                 } else {
                     Link(destination: file.url) {
