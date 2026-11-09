@@ -36,6 +36,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     private var refreshedExpiredLink = false
     private var systemCompletion: (() -> Void)?
     private var eventsFinished = false
+    private let progressID = "dr-store-game-data"
 
     private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionID)
@@ -77,7 +78,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         return payload(transfer)
     }
 
-    func start(share: URL) {
+    func start(share: URL, title: String) {
         guard !working, !ready, GameDataSource.accepts(share) else { return }
         if let transfer, transfer.share != share {
             error = "Сначала удали прежнюю загрузку."
@@ -85,16 +86,20 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         }
         directURL = nil
         refreshedExpiredLink = false
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            BackgroundTaskManager.shared.startTask(for: progressID, filename: title) { [weak self] in
+                self?.pause()
+            }
+        }
+        #endif
+        showProgress()
         resolve(share: share)
     }
 
     func discard() {
         guard !installing else { return }
-        resolution?.cancel()
-        resolution = nil
-        task?.cancel()
-        task = nil
-        directURL = nil
+        pause()
         do {
             if files.fileExists(atPath: root.path) { try files.removeItem(at: root) }
             transfer = nil
@@ -103,8 +108,35 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func pause() {
+        resolution?.cancel()
+        resolution = nil
+        task?.cancel()
+        task = nil
+        directURL = nil
         working = false
+        if let transfer { received = length(of: payload(transfer)) }
+        finishProgress(success: false)
         completeSystemEvents()
+    }
+
+    private func showProgress() {
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *), let size = transfer?.size, size > 0 {
+            BackgroundTaskManager.shared.updateProgress(for: progressID, progress: Double(received) / Double(size),
+                stage: GameDataSource.progressText(received: received, total: size))
+        }
+        #endif
+    }
+
+    private func finishProgress(success: Bool) {
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 26.0, *) {
+            BackgroundTaskManager.shared.stopTask(for: progressID, success: success)
+        }
+        #endif
     }
 
     @MainActor
@@ -152,6 +184,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                     try persist(Transfer(id: UUID(), share: share, size: size, name: metadata.name))
                 }
                 directURL = url
+                showProgress()
                 try enqueueBlock()
             } catch {
                 if !Task.isCancelled { stop(error) }
@@ -214,6 +247,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         task = nil
         working = false
         if let transfer { received = length(of: payload(transfer)) }
+        finishProgress(success: false)
         error = (failure as? GameDataSource.Failure)?.localizedDescription
             ?? "Загрузка прервалась. Проверь интернет и свободное место, затем нажми «Продолжить»."
     }
@@ -234,11 +268,12 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let range = block(downloadTask), range.id == transfer?.id, working else { return }
         received = range.range.lowerBound + min(totalBytesWritten, range.range.upperBound - range.range.lowerBound + 1)
+        showProgress()
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard working, var record = transfer, let block = block(downloadTask), block.id == record.id,
-              task == nil || task?.taskIdentifier == downloadTask.taskIdentifier else { return }
+              task?.taskIdentifier == downloadTask.taskIdentifier || (task == nil && resolution == nil) else { return }
         do {
             let destination = payload(record)
             guard length(of: destination) == block.range.lowerBound,
@@ -265,6 +300,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
             if received == record.size {
                 working = false
                 directURL = nil
+                finishProgress(success: true)
             } else if directURL == nil {
                 resolve(share: record.share)
             } else {
@@ -276,8 +312,8 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     func urlSession(_ session: URLSession, task completed: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let error, let block = block(completed), block.id == transfer?.id,
-              task == nil || task?.taskIdentifier == completed.taskIdentifier else { return }
+        guard working, let error, let block = block(completed), block.id == transfer?.id,
+              task?.taskIdentifier == completed.taskIdentifier || (task == nil && resolution == nil) else { return }
         stop(error)
     }
 }

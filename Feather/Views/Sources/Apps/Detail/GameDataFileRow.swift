@@ -31,7 +31,7 @@ struct GameDataFileRow: View {
                         Image(systemName: "ellipsis.circle").font(.title3)
                     }.accessibilityLabel("Действия с загрузкой").disabled(download.installing)
                 } else {
-                    Button { download.start(share: file.url) } label: {
+                    Button { download.start(share: file.url, title: file.name) } label: {
                         AdditionalFileAction(title: "Скачать", icon: "arrow.down")
                     }.buttonStyle(.plain)
                 }
@@ -47,10 +47,14 @@ struct GameDataFileRow: View {
                 } else {
                     let fraction = min(1, Double(download.received) / Double(download.transfer?.size ?? file.size))
                     ProgressView(value: fraction) {
-                        Text(fraction, format: .percent.precision(.fractionLength(0)))
+                        HStack {
+                            Text(GameDataSource.progressText(received: download.received, total: download.transfer?.size ?? file.size))
+                            Spacer()
+                            Text(fraction, format: .percent.precision(.fractionLength(0)))
+                        }.font(.footnote).monospacedDigit()
                     }
                     if !download.working {
-                        Button { download.start(share: file.url) } label: {
+                        Button { download.start(share: file.url, title: file.name) } label: {
                             AdditionalFileAction(title: "Продолжить", icon: "arrow.down")
                         }.buttonStyle(.plain)
                     }
@@ -104,7 +108,7 @@ struct GameDataFileRow: View {
     }
 }
 
-private struct GameDataExporter: UIViewControllerRepresentable {
+struct GameDataExporter: UIViewControllerRepresentable {
     let url: URL
     let chooseFolder: Bool
     let finished: (URL?) -> Void

@@ -12,6 +12,8 @@ struct AppAdditionalFilesView: View {
             ForEach(Array(files.enumerated()), id: \.offset) { index, file in
                 if GameDataSource.accepts(file.url) && (file.extractArchive == true || (allowsGameData && file.size >= 1024 * 1024 * 1024)) {
                     GameDataFileRow(file: file)
+                } else if AdditionalDocumentRow.supports(file) {
+                    AdditionalDocumentRow(file: file)
                 } else {
                     Link(destination: file.url) {
                         HStack(spacing: 12) {
