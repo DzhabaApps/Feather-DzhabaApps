@@ -37,6 +37,9 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     private var systemCompletion: (() -> Void)?
     private var eventsFinished = false
     private let progressID = "dr-store-game-data"
+    private let diagnosticsURL = URL.cachesDirectory.appendingPathComponent("DRStoreGameDataDiagnostics.txt")
+    private var diagnosticLines: [String] = []
+    private var lastProgressLog = -Double.infinity
 
     private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionID)
@@ -49,11 +52,18 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
 
     private override init() {
         super.init()
+        if let savedLog = try? String(contentsOf: diagnosticsURL, encoding: .utf8) {
+            diagnosticLines = Array(savedLog.split(separator: "\n").suffix(100).map(String.init))
+        }
+        for name in [UIApplication.didEnterBackgroundNotification, UIApplication.didBecomeActiveNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(recordLifecycle(_:)), name: name, object: nil)
+        }
         guard let data = try? Data(contentsOf: recordURL),
               let saved = try? JSONDecoder().decode(Transfer.self, from: data),
               GameDataSource.safeName(saved.name), GameDataSource.accepts(saved.share) else { return }
         transfer = saved
         received = length(of: payload(saved))
+        log("restored checkpoint=\(received)/\(saved.size)")
         guard received < saved.size else { return }
         working = true
         session.getAllTasks { [weak self] tasks in
@@ -92,6 +102,8 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         }
         directURL = nil
         refreshedExpiredLink = false
+        lastProgressLog = -Double.infinity
+        log("start checkpoint=\(received)")
         beginProgress(title: title)
         showProgress()
         resolve(share: share)
@@ -101,6 +113,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.startTask(for: progressID, filename: title) { [weak self] in
+                self?.log("system-task expiration callback")
                 self?.pause()
             }
         }
@@ -121,6 +134,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     func pause() {
+        log("pause checkpoint=\(transfer.map { length(of: payload($0)) } ?? 0)")
         resolution?.cancel()
         resolution = nil
         task?.cancel()
@@ -164,6 +178,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     func handleSystemEvents(_ completion: @escaping () -> Void) {
+        log("background URLSession wake")
         systemCompletion = completion
         _ = session
         completeSystemEvents()
@@ -197,7 +212,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 showProgress()
                 try enqueueBlock()
             } catch {
-                if !Task.isCancelled { stop(error) }
+                if !Task.isCancelled { stop(error, source: "resolve") }
             }
         }
     }
@@ -215,6 +230,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         let next = session.downloadTask(with: request)
         next.taskDescription = String(decoding: description, as: UTF8.self)
         task = next
+        log("range requested task=\(next.taskIdentifier) offset=\(range.lowerBound) end=\(range.upperBound)")
         next.resume()
     }
 
@@ -253,7 +269,9 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         try output.synchronize()
     }
 
-    private func stop(_ failure: Error) {
+    private func stop(_ failure: Error, source: String) {
+        let details = failure as NSError
+        log("\(source) failed domain=\(details.domain) code=\(details.code)")
         task = nil
         working = false
         if let transfer { received = length(of: payload(transfer)) }
@@ -278,12 +296,19 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                     totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let range = block(downloadTask), range.id == transfer?.id, working else { return }
         received = range.range.lowerBound + min(totalBytesWritten, range.range.upperBound - range.range.lowerBound + 1)
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastProgressLog >= 20 {
+            lastProgressLog = now
+            log("bytes received=\(received) task=\(downloadTask.taskIdentifier)")
+        }
         showProgress()
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard working, var record = transfer, let block = block(downloadTask), block.id == record.id,
               task?.taskIdentifier == downloadTask.taskIdentifier || (task == nil && resolution == nil) else { return }
+        let status = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
+        log("range response task=\(downloadTask.taskIdentifier) HTTP=\(status)")
         do {
             let destination = payload(record)
             guard length(of: destination) == block.range.lowerBound,
@@ -306,6 +331,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
             }
             try append(location, to: destination)
             received = length(of: destination)
+            log("checkpoint saved=\(received)/\(record.size)")
             refreshedExpiredLink = false
             if received == record.size {
                 working = false
@@ -317,13 +343,33 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 try enqueueBlock()
             }
         } catch {
-            stop(error)
+            stop(error, source: "range validation or write")
         }
     }
 
     func urlSession(_ session: URLSession, task completed: URLSessionTask, didCompleteWithError error: Error?) {
-        guard working, let error, let block = block(completed), block.id == transfer?.id,
+        guard let error, let block = block(completed), block.id == transfer?.id else { return }
+        let details = error as NSError
+        log("URLSession completion task=\(completed.taskIdentifier) domain=\(details.domain) code=\(details.code)")
+        guard working,
               task?.taskIdentifier == completed.taskIdentifier || (task == nil && resolution == nil) else { return }
-        stop(error)
+        stop(error, source: "URLSession")
+    }
+
+    var diagnosticsReport: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        return (["DR Store \(version) / iOS \(UIDevice.current.systemVersion)"] + diagnosticLines).joined(separator: "\n")
+    }
+
+    @objc private func recordLifecycle(_ notification: Notification) {
+        guard working || transfer != nil else { return }
+        log(notification.name == UIApplication.didEnterBackgroundNotification ? "app background" : "app active")
+    }
+
+    private func log(_ event: String) {
+        let time = String(format: "%.3f", Date().timeIntervalSince1970)
+        diagnosticLines.append("\(time) \(event)")
+        if diagnosticLines.count > 100 { diagnosticLines.removeFirst(diagnosticLines.count - 100) }
+        try? diagnosticLines.joined(separator: "\n").write(to: diagnosticsURL, atomically: true, encoding: .utf8)
     }
 }

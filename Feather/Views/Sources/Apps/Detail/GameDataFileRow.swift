@@ -11,6 +11,7 @@ struct GameDataFileRow: View {
     @State private var replaceDestination: URL?
     @State private var confirmReplace = false
     @State private var saveError: String?
+    @State private var copiedDiagnostics = false
 
     private var extractsArchive: Bool { file.extractArchive == true }
 
@@ -28,6 +29,12 @@ struct GameDataFileRow: View {
                             Button { download.pause() } label: {
                                 Label("Пауза", systemImage: "pause")
                             }
+                        }
+                        Button {
+                            UIPasteboard.general.string = download.diagnosticsReport
+                            copiedDiagnostics = true
+                        } label: {
+                            Label("Скопировать диагностику", systemImage: "doc.on.doc")
                         }
                         Button(role: .destructive) { confirmDelete = true } label: {
                             Label(download.ready ? "Удалить файл" : "Отменить загрузку", systemImage: "trash")
@@ -75,6 +82,11 @@ struct GameDataFileRow: View {
         }
         .padding(16)
         .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
+        .alert("Диагностика скопирована", isPresented: $copiedDiagnostics) {
+            Button("ОК", role: .cancel) {}
+        } message: {
+            Text("Вставь отчёт в сообщение.")
+        }
         .confirmationDialog(download.ready ? "Удалить скачанный файл?" : "Отменить загрузку и удалить скачанную часть?",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button(download.ready ? "Удалить" : "Отменить загрузку", role: .destructive) {
