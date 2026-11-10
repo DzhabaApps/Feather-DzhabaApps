@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import UIKit
 
-/// One GTA data download. The background session writes each range to disk.
+/// Test one background task for the entire remaining ZIP, using native resume data.
 /// The assembled file and its identity survive a relaunch. State and delegate callbacks run on the main queue.
 final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDelegate, @unchecked Sendable {
     static let shared = GameDataDownload()
@@ -21,9 +21,17 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         let range: ClosedRange<Int64>
     }
 
+    private struct ResumeCheckpoint: Codable {
+        let block: Block
+        let received: Int64
+        let data: Data
+    }
+
     @Published private(set) var transfer: Transfer?
     @Published private(set) var received: Int64 = 0
     @Published private(set) var working = false
+    @Published private(set) var pausing = false
+    @Published private(set) var resumeStatus: String?
     @Published private(set) var installing = false
     @Published private(set) var extractionProgress: Double?
     @Published private(set) var preparedFolder: URL?
@@ -32,6 +40,8 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     private let files = FileManager.default
     private let root = URL.applicationSupportDirectory.appendingPathComponent("DRStoreGameData", isDirectory: true)
     private var recordURL: URL { root.appendingPathComponent("transfer.json") }
+    private var resumeURL: URL { root.appendingPathComponent("single-task-resume.json") }
+    private var checkpoint: ResumeCheckpoint?
     private var task: URLSessionDownloadTask?
     private var resolution: Task<Void, Never>?
     private var directURL: URL?
@@ -59,6 +69,14 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
             preparedFolder = findPreparedFolder(for: saved)
             return
         }
+        if let data = try? Data(contentsOf: resumeURL),
+           let savedResume = try? JSONDecoder().decode(ResumeCheckpoint.self, from: data),
+           savedResume.block.id == saved.id, savedResume.block.range.lowerBound == received,
+           savedResume.block.range.upperBound == saved.size - 1, !savedResume.data.isEmpty {
+            checkpoint = savedResume
+            received = savedResume.received
+            resumeStatus = "Пауза сохранена · \(GameDataSource.byteCount(received))"
+        }
         working = true
         session.getAllTasks { [weak self] tasks in
             DispatchQueue.main.async {
@@ -69,8 +87,10 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 }
                 self.working = self.task != nil
                 if let task = self.task, let block = self.block(task) {
-                    self.received = block.range.lowerBound + min(task.countOfBytesReceived,
-                        block.range.upperBound - block.range.lowerBound + 1)
+                    if task.countOfBytesReceived > 0 {
+                        self.received = block.range.lowerBound + min(task.countOfBytesReceived,
+                            block.range.upperBound - block.range.lowerBound + 1)
+                    }
                 }
             }
         }
@@ -78,7 +98,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
 
     var ready: Bool {
         guard let transfer else { return false }
-        return !working && received == transfer.size && transfer.etag != nil
+        return !working && !pausing && length(of: payload(transfer)) == transfer.size && transfer.etag != nil
     }
 
     var exportURL: URL? {
@@ -87,39 +107,88 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     func start(share: URL) {
-        guard !working, !ready, GameDataSource.accepts(share) else { return }
+        guard !working, !pausing, !ready, GameDataSource.accepts(share) else { return }
         if let transfer, transfer.share != share {
             error = "Сначала удали прежнюю загрузку."
             return
         }
         directURL = nil
         refreshedExpiredLink = false
+        if let checkpoint {
+            error = nil
+            working = true
+            resumeStatus = "Проверяем докачку с \(GameDataSource.byteCount(checkpoint.received))…"
+            let next = session.downloadTask(withResumeData: checkpoint.data)
+            do {
+                next.taskDescription = String(decoding: try JSONEncoder().encode(checkpoint.block), as: UTF8.self)
+            } catch {
+                next.cancel()
+                stop(error)
+                return
+            }
+            task = next
+            next.resume()
+            return
+        }
         resolve(share: share)
     }
 
     func discard() {
-        guard !installing else { return }
-        pause()
+        guard !installing, !pausing else { return }
+        defer { completeSystemEvents() }
+        resolution?.cancel()
+        resolution = nil
+        task?.cancel()
+        task = nil
+        working = false
+        directURL = nil
         do {
             if files.fileExists(atPath: root.path) { try files.removeItem(at: root) }
             transfer = nil
             received = 0
             preparedFolder = nil
             error = nil
+            checkpoint = nil
+            resumeStatus = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
 
     func pause() {
+        guard !pausing else { return }
         resolution?.cancel()
         resolution = nil
-        task?.cancel()
+        let active = task
         task = nil
         directURL = nil
         working = false
-        if let transfer { received = length(of: payload(transfer)) }
-        completeSystemEvents()
+        guard let active, let block = block(active) else {
+            completeSystemEvents()
+            return
+        }
+        let progress = received
+        pausing = true
+        active.cancel(byProducingResumeData: { [weak self] data in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                defer { self.pausing = false; self.completeSystemEvents() }
+                guard self.transfer?.id == block.id else { return }
+                do {
+                    guard let data, !data.isEmpty else { throw URLError(.cannotResume) }
+                    try self.saveCheckpoint(data, block: block, received: progress)
+                    self.resumeStatus = "Пауза сохранена · \(GameDataSource.byteCount(progress))"
+                } catch {
+                    self.error = "iOS не сохранила текущую загрузку для докачки. Это ограничение тестовой версии."
+                }
+            }
+        })
+    }
+
+    private func saveCheckpoint(_ data: Data, block: Block, received: Int64) throws {
+        let saved = ResumeCheckpoint(block: block, received: received, data: data)
+        try JSONEncoder().encode(saved).write(to: resumeURL, options: .atomic)
+        checkpoint = saved
     }
 
     @MainActor
@@ -211,12 +280,14 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
 
     private func enqueueBlock() throws {
         guard let transfer, let directURL,
-              let range = GameDataSource.range(from: length(of: payload(transfer)), size: transfer.size) else {
+              let range = GameDataSource.remainingRange(from: length(of: payload(transfer)), size: transfer.size) else {
             throw URLError(.badServerResponse)
         }
         var request = URLRequest(url: directURL)
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-        request.setValue("bytes=\(range.lowerBound)-\(range.upperBound)", forHTTPHeaderField: "Range")
+        if range.lowerBound > 0 {
+            request.setValue("bytes=\(range.lowerBound)-\(range.upperBound)", forHTTPHeaderField: "Range")
+        }
         request.setValue(transfer.etag, forHTTPHeaderField: "If-Match")
         let description = try JSONEncoder().encode(Block(id: transfer.id, range: range))
         let next = session.downloadTask(with: request)
@@ -263,13 +334,16 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     private func stop(_ failure: Error) {
         task = nil
         working = false
-        if let transfer { received = length(of: payload(transfer)) }
+        if let transfer { received = checkpoint?.received ?? length(of: payload(transfer)) }
         error = (failure as? GameDataSource.Failure)?.localizedDescription
             ?? "Загрузка прервалась. Проверь интернет и свободное место, затем нажми «Продолжить»."
+        if (failure as NSError).domain == NSURLErrorDomain && (failure as NSError).code == NSURLErrorCannotResume {
+            error = "iOS не смогла возобновить тестовую загрузку с сохранённого места."
+        }
     }
 
     private func completeSystemEvents() {
-        guard eventsFinished, resolution == nil, let completion = systemCompletion else { return }
+        guard eventsFinished, resolution == nil, !pausing, let completion = systemCompletion else { return }
         eventsFinished = false
         systemCompletion = nil
         completion()
@@ -286,6 +360,16 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         received = range.range.lowerBound + min(totalBytesWritten, range.range.upperBound - range.range.lowerBound + 1)
     }
 
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didResumeAtOffset fileOffset: Int64,
+                    expectedTotalBytes: Int64) {
+        guard working, let block = block(downloadTask), block.id == transfer?.id,
+              task?.taskIdentifier == downloadTask.taskIdentifier else { return }
+        received = block.range.lowerBound + fileOffset
+        resumeStatus = fileOffset > 0
+            ? "iOS подтвердила докачку с \(GameDataSource.byteCount(received))"
+            : "iOS начала текущую загрузку заново. Сохранённая часть не использована."
+    }
+
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard working, var record = transfer, let block = block(downloadTask), block.id == record.id,
               task?.taskIdentifier == downloadTask.taskIdentifier || (task == nil && resolution == nil) else { return }
@@ -295,13 +379,18 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                   let response = downloadTask.response as? HTTPURLResponse,
                   GameDataSource.acceptsDownload(response.url) else { throw URLError(.badServerResponse) }
             task = nil
+            if [401, 403, 410].contains(response.statusCode), checkpoint != nil {
+                stop(URLError(.cannotResume))
+                error = "Старая ссылка Яндекса отклонена. Докачка в этом тесте не удалась. Заново автоматически не скачиваем."
+                return
+            }
             if [401, 403, 410].contains(response.statusCode), !refreshedExpiredLink {
                 refreshedExpiredLink = true
                 received = length(of: destination)
                 resolve(share: record.share)
                 return
             }
-            let tag = try GameDataSource.checkedETag(response, range: block.range, size: record.size, previous: record.etag)
+            let tag = try GameDataSource.checkedCompleteETag(response, range: block.range, size: record.size, previous: record.etag)
             guard length(of: location) == block.range.upperBound - block.range.lowerBound + 1 else {
                 throw URLError(.badServerResponse)
             }
@@ -310,6 +399,8 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 try persist(record)
             }
             try append(location, to: destination)
+            checkpoint = nil
+            try? files.removeItem(at: resumeURL)
             received = length(of: destination)
             refreshedExpiredLink = false
             if received == record.size {
@@ -328,6 +419,10 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     func urlSession(_ session: URLSession, task completed: URLSessionTask, didCompleteWithError error: Error?) {
         guard working, let error, let block = block(completed), block.id == transfer?.id,
               task?.taskIdentifier == completed.taskIdentifier || (task == nil && resolution == nil) else { return }
+        if let data = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data, !data.isEmpty {
+            do { try saveCheckpoint(data, block: block, received: received) }
+            catch { self.error = "Не удалось сохранить состояние докачки." }
+        }
         stop(error)
     }
 }

@@ -25,6 +25,10 @@ precondition(GameDataSource.range(from: 0, size: size) == 0...(block - 1))
 precondition(GameDataSource.range(from: block, size: size) == block...(2 * block - 1))
 precondition(GameDataSource.range(from: size - 4, size: size) == (size - 4)...(size - 1))
 precondition(GameDataSource.range(from: size, size: size) == nil)
+precondition(GameDataSource.remainingRange(from: 0, size: size) == 0...(size - 1))
+precondition(GameDataSource.remainingRange(from: block, size: size) == block...(size - 1))
+precondition(GameDataSource.remainingRange(from: -1, size: size) == nil)
+precondition(GameDataSource.remainingRange(from: size, size: size) == nil)
 
 func response(_ status: Int, _ contentRange: String, _ tag: String) -> HTTPURLResponse {
     HTTPURLResponse(url: host, statusCode: status, httpVersion: "HTTP/1.1",
@@ -45,3 +49,17 @@ for invalid in [response(200, header, etag), response(206, "bytes 0-3/4", etag),
     precondition((try? GameDataSource.checkedETag(invalid, range: last, size: size, previous: etag)) == nil)
 }
 print("Game data: share recognition, safe filename, 64-bit checkpoints, exact range and unchanged file identity passed.")
+
+let full = 0...(size - 1)
+let fullTag = try GameDataSource.checkedCompleteETag(response(200, "", etag), range: full, size: size, previous: nil)
+precondition(fullTag == etag)
+let resumeHeader = "bytes \(2 * block)-\(size - 1)/\(size)"
+let resumedTag = try GameDataSource.checkedCompleteETag(response(206, resumeHeader, etag), range: full, size: size, previous: etag)
+precondition(resumedTag == etag)
+for invalid in [response(206, "bytes 0-3/4", etag), response(403, resumeHeader, etag),
+                response(206, resumeHeader, "\"changed\""), response(200, "", "W/" + etag)] {
+    precondition((try? GameDataSource.checkedCompleteETag(invalid, range: full, size: size, previous: etag)) == nil)
+}
+precondition((try? GameDataSource.checkedCompleteETag(response(200, "", etag),
+              range: block...(size - 1), size: size, previous: etag)) == nil)
+print("Single-task experiment: remaining range, full and resumed responses, changed file and invalid responses passed.")

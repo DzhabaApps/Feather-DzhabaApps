@@ -47,7 +47,7 @@ struct GameDataFileRow: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle").font(.title3)
-                    }.accessibilityLabel("Действия с загрузкой").disabled(download.installing)
+                    }.accessibilityLabel("Действия с загрузкой").disabled(download.installing || download.pausing)
                 } else {
                     Button { savedFolder = false; download.start(share: file.url) } label: {
                         AdditionalFileAction(title: "Скачать", icon: "arrow.down")
@@ -86,7 +86,9 @@ struct GameDataFileRow: View {
                             Text(fraction, format: .percent.precision(.fractionLength(0)))
                         }.font(.footnote).monospacedDigit()
                     }
-                    if !download.working {
+                    if download.pausing {
+                        ProgressView("Сохраняем паузу…")
+                    } else if !download.working {
                         Button { download.start(share: file.url) } label: {
                             AdditionalFileAction(title: "Продолжить", icon: "arrow.down")
                         }.buttonStyle(.plain)
@@ -99,6 +101,9 @@ struct GameDataFileRow: View {
             }
             if let error = saveError ?? download.error {
                 Text(error).font(.footnote).foregroundStyle(.secondary)
+            }
+            if matches, let status = download.resumeStatus {
+                Text(status).font(.footnote).foregroundStyle(.secondary)
             }
             if savedFolder {
                 Label("Папка сохранена", systemImage: "checkmark.circle")

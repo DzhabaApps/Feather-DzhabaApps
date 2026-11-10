@@ -81,6 +81,28 @@ enum GameDataSource {
         return offset...(offset + min(blockSize, size - offset) - 1)
     }
 
+    static func remainingRange(from offset: Int64, size: Int64) -> ClosedRange<Int64>? {
+        guard offset >= 0, offset < size else { return nil }
+        return offset...(size - 1)
+    }
+
+    static func checkedCompleteETag(_ response: HTTPURLResponse, range: ClosedRange<Int64>, size: Int64,
+                                    previous: String?) throws -> String {
+        if response.statusCode == 200, range.lowerBound == 0 {
+            guard let tag = response.value(forHTTPHeaderField: "ETag"), let identity = tagIdentity(tag) else {
+                throw URLError(.badServerResponse)
+            }
+            guard previous == nil || previous.flatMap(tagIdentity) == identity else { throw Failure.changed }
+            return tag
+        }
+        // URLSession assembles the cached prefix and the suffix returned when resuming.
+        guard let header = response.value(forHTTPHeaderField: "Content-Range"),
+              header.hasPrefix("bytes "), let dash = header.firstIndex(of: "-"),
+              let start = Int64(header[header.index(header.startIndex, offsetBy: 6)..<dash]),
+              range.contains(start) else { throw URLError(.badServerResponse) }
+        return try checkedETag(response, range: start...range.upperBound, size: size, previous: previous)
+    }
+
     static func checkedETag(_ response: HTTPURLResponse, range: ClosedRange<Int64>, size: Int64,
                             previous: String?) throws -> String {
         if response.statusCode == 412 { throw Failure.changed }
