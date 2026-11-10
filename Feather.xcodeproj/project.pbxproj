@@ -192,7 +192,7 @@
 			packageReferences = (
 				3371F5152DA91FDC00281AC6 /* XCLocalSwiftPackageReference "Zsign" */,
 				3371F6F52DA9EBA500281AC6 /* XCRemoteSwiftPackageReference "Zip" */,
-				DA0000000000000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+				DA0000000000000000000003 /* XCLocalSwiftPackageReference "Vendor/ZIPFoundation" */,
 				33CF13372DB5ACFB0021D4C5 /* XCRemoteSwiftPackageReference "SWCompression" */,
 				3305BBAA2DB8944200660D45 /* XCRemoteSwiftPackageReference "vapor" */,
 				330F68FF2DC03DF400D8C35D /* XCLocalSwiftPackageReference "NimbleKit" */,
@@ -588,15 +588,14 @@
 				minimumVersion = 4.8.6;
 			};
 		};
-		DA0000000000000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/weichsel/ZIPFoundation";
-			requirement = {
-				kind = exactVersion;
-				version = 0.9.20;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		DA0000000000000000000003 /* XCLocalSwiftPackageReference "Vendor/ZIPFoundation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/ZIPFoundation;
+		};
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		3305BBAB2DB8944200660D45 /* Vapor */ = {
@@ -658,7 +657,7 @@
 		};
 		DA0000000000000000000002 /* ZIPFoundation */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = DA0000000000000000000003 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			package = DA0000000000000000000003 /* XCLocalSwiftPackageReference "Vendor/ZIPFoundation" */;
 			productName = ZIPFoundation;
 		};
 /* End XCSwiftPackageProductDependency section */
