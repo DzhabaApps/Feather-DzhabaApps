@@ -27,6 +27,12 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         let data: Data
     }
 
+    private struct ResumeFailure: LocalizedError {
+        var errorDescription: String? {
+            "iOS не смогла возобновить тестовую загрузку с сохранённого места."
+        }
+    }
+
     @Published private(set) var transfer: Transfer?
     @Published private(set) var received: Int64 = 0
     @Published private(set) var working = false
@@ -175,7 +181,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 defer { self.pausing = false; self.completeSystemEvents() }
                 guard self.transfer?.id == block.id else { return }
                 do {
-                    guard let data, !data.isEmpty else { throw URLError(.cannotResume) }
+                    guard let data, !data.isEmpty else { throw ResumeFailure() }
                     try self.saveCheckpoint(data, block: block, received: progress)
                     self.resumeStatus = "Пауза сохранена · \(GameDataSource.byteCount(progress))"
                 } catch {
@@ -335,11 +341,9 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         task = nil
         working = false
         if let transfer { received = checkpoint?.received ?? length(of: payload(transfer)) }
-        error = (failure as? GameDataSource.Failure)?.localizedDescription
+        error = (failure as? ResumeFailure)?.localizedDescription
+            ?? (failure as? GameDataSource.Failure)?.localizedDescription
             ?? "Загрузка прервалась. Проверь интернет и свободное место, затем нажми «Продолжить»."
-        if (failure as NSError).domain == NSURLErrorDomain && (failure as NSError).code == NSURLErrorCannotResume {
-            error = "iOS не смогла возобновить тестовую загрузку с сохранённого места."
-        }
     }
 
     private func completeSystemEvents() {
@@ -380,7 +384,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                   GameDataSource.acceptsDownload(response.url) else { throw URLError(.badServerResponse) }
             task = nil
             if [401, 403, 410].contains(response.statusCode), checkpoint != nil {
-                stop(URLError(.cannotResume))
+                stop(ResumeFailure())
                 error = "Старая ссылка Яндекса отклонена. Докачка в этом тесте не удалась. Заново автоматически не скачиваем."
                 return
             }
