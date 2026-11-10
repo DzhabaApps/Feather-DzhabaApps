@@ -1,9 +1,9 @@
-// swift-tools-version:5.0
+// swift-tools-version:5.9
 import PackageDescription
 
 #if canImport(Compression)
 let targets: [Target] = [
-    .target(name: "ZIPFoundation")
+    .target(name: "ZIPFoundation", resources: [.copy("Resources/PrivacyInfo.xcprivacy")])
 ]
 #else
 let targets: [Target] = [
@@ -15,7 +15,7 @@ let targets: [Target] = [
 let package = Package(
     name: "ZIPFoundation",
     platforms: [
-        .macOS(.v10_11), .iOS(.v9), .tvOS(.v9), .watchOS(.v2)
+        .macOS(.v10_13), .iOS(.v12), .tvOS(.v12), .watchOS(.v4), .visionOS(.v1)
     ],
     products: [
         .library(name: "ZIPFoundation", targets: ["ZIPFoundation"])
