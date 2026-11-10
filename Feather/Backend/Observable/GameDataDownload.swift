@@ -137,17 +137,21 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
         installing = true
         extractionProgress = nil
         defer { installing = false; extractionProgress = nil }
-        let folder = try await Task.detached(priority: .userInitiated) {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            return try GameArchive.install(source, in: directory, replacing: false, transferID: id) { [weak self] fraction in
-                Task { @MainActor in
-                    guard let self, self.installing, self.transfer?.id == id else { return }
-                    self.extractionProgress = max(self.extractionProgress ?? 0, fraction)
+        do {
+            let folder = try await Task.detached(priority: .userInitiated) {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                return try GameArchive.install(source, in: directory, replacing: false, transferID: id) { [weak self] fraction in
+                    Task { @MainActor in
+                        guard let self, self.installing, self.transfer?.id == id else { return }
+                        self.extractionProgress = max(self.extractionProgress ?? 0, fraction)
+                    }
                 }
-            }
-        }.value
-        preparedFolder = folder
-        return folder
+            }.value
+            preparedFolder = folder
+            return folder
+        } catch {
+            throw GameArchive.writeFailure(error)
+        }
     }
 
     func completeExport(of source: URL) {

@@ -43,6 +43,16 @@ let target = fixtures.appendingPathComponent("out", isDirectory: true)
 try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
 let game = target.appendingPathComponent("GTAV")
 let id = UUID()
+let noSpace = NSError(domain: NSPOSIXErrorDomain, code: Int(POSIXErrorCode.ENOSPC.rawValue))
+let wrapped = NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileWriteUnknown.rawValue,
+                      userInfo: [NSUnderlyingErrorKey: noSpace])
+for error in [noSpace, wrapped, NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileWriteOutOfSpace.rawValue)] {
+    guard case GameArchive.Failure.noSpace? = GameArchive.writeFailure(error) as? GameArchive.Failure else {
+        fatalError("Actual disk-full error was not recognized")
+    }
+}
+let denied = NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileWriteNoPermission.rawValue)
+precondition((GameArchive.writeFailure(denied) as NSError).code == denied.code)
 @discardableResult
 func install(_ name: String, replacing: Bool = false, progress: (Double) -> Void = { _ in }) throws -> URL {
     try GameArchive.install(fixtures.appendingPathComponent(name + ".zip"), in: target,

@@ -16,6 +16,19 @@ enum GameArchive {
         }
     }
 
+    static func writeFailure(_ error: Error) -> Error {
+        var current: NSError? = error as NSError
+        for _ in 0..<8 {
+            guard let details = current else { break }
+            if (details.domain == NSCocoaErrorDomain && details.code == CocoaError.fileWriteOutOfSpace.rawValue)
+                || (details.domain == NSPOSIXErrorDomain && details.code == Int(POSIXErrorCode.ENOSPC.rawValue)) {
+                return Failure.noSpace
+            }
+            current = details.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return error
+    }
+
     @discardableResult
     static func install(_ zip: URL, in folder: URL, replacing: Bool, transferID: UUID,
                         progress: (Double) -> Void = { _ in }) throws -> URL {
@@ -52,8 +65,8 @@ enum GameArchive {
         }
         let hasTarget = fm.fileExists(atPath: target.path)
         if hasTarget && !replacing { throw Failure.destinationExists }
-        if let free = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity,
-           free >= 0, UInt64(free) < total { throw Failure.noSpace }
+        // iOS can reclaim purgeable space as the user-requested data is written.
+        // Let the filesystem report a real shortage instead of rejecting its capacity estimate.
         if fm.fileExists(atPath: staging.path) { try fm.removeItem(at: staging) }
         try fm.createDirectory(at: extracted, withIntermediateDirectories: true)
         var keepBackup = false
@@ -111,9 +124,8 @@ enum GameArchive {
             return
         }
         try fm.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard !fm.fileExists(atPath: output.path), fm.createFile(atPath: output.path, contents: nil) else {
-            throw Failure.invalid
-        }
+        guard !fm.fileExists(atPath: output.path) else { throw Failure.invalid }
+        try Data().write(to: output, options: .withoutOverwriting)
         let handle = try FileHandle(forWritingTo: output)
         defer { try? handle.close() }
         var written: UInt64 = 0
