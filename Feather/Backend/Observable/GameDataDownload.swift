@@ -104,7 +104,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
 
     var ready: Bool {
         guard let transfer else { return false }
-        return !working && !pausing && length(of: payload(transfer)) == transfer.size && transfer.etag != nil
+        return !working && !pausing && length(of: payload(transfer)) == transfer.size
     }
 
     var exportURL: URL? {

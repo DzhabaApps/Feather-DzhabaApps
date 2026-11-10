@@ -56,9 +56,16 @@ precondition(fullTag == etag)
 let resumeHeader = "bytes \(2 * block)-\(size - 1)/\(size)"
 let resumedTag = try GameDataSource.checkedCompleteETag(response(206, resumeHeader, etag), range: full, size: size, previous: etag)
 precondition(resumedTag == etag)
+let lastModifiedOnly = HTTPURLResponse(url: host, statusCode: 206, httpVersion: "HTTP/1.1",
+    headerFields: ["Content-Range": resumeHeader, "Last-Modified": "Tue, 10 Nov 2026 12:00:00 GMT"])!
+let untagged = try GameDataSource.checkedCompleteETag(lastModifiedOnly, range: full, size: size, previous: nil)
+precondition(untagged == nil)
 for invalid in [response(206, "bytes 0-3/4", etag), response(403, resumeHeader, etag),
-                response(206, resumeHeader, "\"changed\""), response(200, "", "W/" + etag)] {
-    precondition((try? GameDataSource.checkedCompleteETag(invalid, range: full, size: size, previous: etag)) == nil)
+                response(206, resumeHeader, "\"changed\""), response(200, "", "W/" + etag), lastModifiedOnly] {
+    do {
+        _ = try GameDataSource.checkedCompleteETag(invalid, range: full, size: size, previous: etag)
+        fatalError("Accepted an invalid single-task response")
+    } catch {}
 }
 precondition((try? GameDataSource.checkedCompleteETag(response(200, "", etag),
               range: block...(size - 1), size: size, previous: etag)) == nil)
