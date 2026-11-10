@@ -1,18 +1,21 @@
 import AltSourceKit
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
 struct GameDataFileRow: View {
     let file: ASRepository.App.AdditionalFile
     @ObservedObject private var download = GameDataDownload.shared
-    @State private var saving = false
-    @State private var selectingFolder = false
+    @State private var saving: Export?
     @State private var confirmDelete = false
-    @State private var replaceDestination: GameArchive.Destination?
-    @State private var confirmReplace = false
     @State private var saveError: String?
     @State private var savedFolder = false
+
+    private struct Export: Identifiable {
+        let url: URL
+        let isFolder: Bool
+        let asCopy: Bool
+        var id: URL { url }
+    }
 
     private var extractsArchive: Bool { file.extractArchive == true }
 
@@ -29,6 +32,14 @@ struct GameDataFileRow: View {
                         if download.working {
                             Button { download.pause() } label: {
                                 Label("Пауза", systemImage: "pause")
+                            }
+                        }
+                        if matches, extractsArchive, let zip = download.exportURL {
+                            Button {
+                                saveError = nil
+                                saving = Export(url: zip, isFolder: false, asCopy: false)
+                            } label: {
+                                Label("Сохранить исходный ZIP", systemImage: "archivebox")
                             }
                         }
                         Button(role: .destructive) { confirmDelete = true } label: {
@@ -53,15 +64,16 @@ struct GameDataFileRow: View {
                         ProgressView("Готовим распаковку…")
                     }
                 } else if download.ready {
-                    Text("Файл скачан").font(.subheadline).foregroundStyle(.secondary)
+                    Text(download.preparedFolder == nil ? "Файл скачан" : "Папка готова к переносу")
+                        .font(.subheadline).foregroundStyle(.secondary)
                     Button {
                         saveError = nil
-                        guard download.exportURL != nil else {
+                        guard let source = download.exportURL else {
                             saveError = "Не удалось открыть скачанный файл."
                             return
                         }
-                        if extractsArchive { selectingFolder = true }
-                        else { saving = true }
+                        if extractsArchive { prepareAndExport() }
+                        else { saving = Export(url: source, isFolder: false, asCopy: true) }
                     } label: {
                         AdditionalFileAction(title: extractsArchive ? "Сохранить" : "Сохранить в Файлы", icon: "folder")
                     }.buttonStyle(.plain)
@@ -103,40 +115,25 @@ struct GameDataFileRow: View {
             }
             Button("Назад", role: .cancel) {}
         }
-        .alert("Заменить существующую папку?", isPresented: $confirmReplace) {
-            Button("Заменить", role: .destructive) {
-                if let destination = replaceDestination { saveFolder(at: destination, replacing: true) }
-                replaceDestination = nil
-            }
-            Button("Отмена", role: .cancel) { replaceDestination = nil }
-        }
-        .fileImporter(isPresented: $selectingFolder, allowedContentTypes: [.folder]) { result in
-            do {
-                let destination = try GameArchive.Destination(result.get())
-                saveFolder(at: destination, replacing: false)
-            } catch {
-                saveError = "Не удалось выбрать папку. Скачанный ZIP остался на iPhone."
-            }
-        }
-        .sheet(isPresented: $saving) {
-            if let url = download.exportURL {
-                GameDataExporter(url: url) { result in
-                    saving = false
-                    if result != nil { download.discard() }
+        .sheet(item: $saving) { item in
+            GameDataExporter(url: item.url, asCopy: item.asCopy) { result in
+                saving = nil
+                guard let result else { return }
+                if item.isFolder && result.lastPathComponent != item.url.lastPathComponent {
+                    saveError = "Папка перенесена под другим именем. В «Файлах» назови её \(item.url.lastPathComponent). ZIP сохранён."
+                    return
                 }
+                download.completeExport(of: item.url)
+                savedFolder = item.isFolder
             }
         }
     }
 
-    private func saveFolder(at destination: GameArchive.Destination, replacing: Bool) {
-        saveError = nil
+    private func prepareAndExport() {
         Task { @MainActor in
             do {
-                try await download.saveFolder(to: destination, replacing: replacing)
-                savedFolder = true
-            } catch GameArchive.Failure.destinationExists {
-                replaceDestination = destination
-                confirmReplace = true
+                let folder = try await download.prepareFolder()
+                saving = Export(url: folder, isFolder: true, asCopy: false)
             } catch {
                 saveError = (error as? GameArchive.Failure)?.localizedDescription
                     ?? "Не удалось сохранить папку. ZIP остался на iPhone. Проверь свободное место и попробуй снова."
@@ -147,12 +144,13 @@ struct GameDataFileRow: View {
 
 struct GameDataExporter: UIViewControllerRepresentable {
     let url: URL
+    var asCopy = true
     let finished: (URL?) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(finished: finished) }
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+        let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: asCopy)
         picker.delegate = context.coordinator
         return picker
     }

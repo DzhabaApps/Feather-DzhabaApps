@@ -10,37 +10,15 @@ enum GameArchive {
             case .invalid: return "Архив повреждён или не содержит одну готовую папку."
             case .noSpace: return "Не хватает свободного места для распаковки. Скачанный ZIP сохранён."
             case .destinationExists: return "Такая папка уже есть в выбранном месте."
-            case .destinationUnavailable: return "Не удалось открыть выбранную папку для записи. Скачанный ZIP сохранён."
+            case .destinationUnavailable: return "Не удалось подготовить папку к переносу. Скачанный ZIP сохранён."
             case .rollbackFailed(let path): return "Не удалось вернуть прежнюю папку на место. Её копия сохранена в \(path)."
             }
         }
     }
 
-    final class Destination: @unchecked Sendable {
-        let url: URL
-
-        init(_ url: URL) throws {
-            self.url = url
-            guard url.startAccessingSecurityScopedResource() else { throw Failure.destinationUnavailable }
-        }
-
-        deinit { url.stopAccessingSecurityScopedResource() }
-    }
-
-    static func save(_ zip: URL, in destination: Destination, replacing: Bool, transferID: UUID,
-                     progress: @escaping (Double) -> Void) throws {
-        var coordinationError: NSError?
-        var result: Result<Void, Error>?
-        NSFileCoordinator().coordinate(writingItemAt: destination.url, options: [], error: &coordinationError) { folder in
-            result = Result { try install(zip, in: folder, replacing: replacing, transferID: transferID, progress: progress) }
-        }
-        if let coordinationError { throw coordinationError }
-        guard let result else { throw Failure.destinationUnavailable }
-        try result.get()
-    }
-
+    @discardableResult
     static func install(_ zip: URL, in folder: URL, replacing: Bool, transferID: UUID,
-                        progress: (Double) -> Void = { _ in }) throws {
+                        progress: (Double) -> Void = { _ in }) throws -> URL {
         let archive = try Archive(url: zip, accessMode: .read)
         let expectedCount = try entryCount(in: zip)
         guard expectedCount > 0, expectedCount <= 100_000 else { throw Failure.invalid }
@@ -109,6 +87,7 @@ enum GameArchive {
             throw error
         }
         progress(1)
+        return target
     }
 
     private static func components(of entry: Entry) throws -> [String] {

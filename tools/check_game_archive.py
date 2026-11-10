@@ -43,12 +43,15 @@ let target = fixtures.appendingPathComponent("out", isDirectory: true)
 try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
 let game = target.appendingPathComponent("GTAV")
 let id = UUID()
-func install(_ name: String, replacing: Bool = false, progress: (Double) -> Void = { _ in }) throws {
+@discardableResult
+func install(_ name: String, replacing: Bool = false, progress: (Double) -> Void = { _ in }) throws -> URL {
     try GameArchive.install(fixtures.appendingPathComponent(name + ".zip"), in: target,
                             replacing: replacing, transferID: id, progress: progress)
 }
 var progress: [Double] = []
-try install("zip64") { progress.append($0) }
+let prepared = try install("zip64") { progress.append($0) }
+precondition(prepared.lastPathComponent == "GTAV")
+precondition(FileManager.default.fileExists(atPath: fixtures.appendingPathComponent("zip64.zip").path))
 precondition(progress.count >= 2 && progress.first! < 1 && progress.last == 1)
 let data = try String(contentsOf: game.appendingPathComponent("sub/data"), encoding: .utf8)
 precondition(data == "game-bytes")

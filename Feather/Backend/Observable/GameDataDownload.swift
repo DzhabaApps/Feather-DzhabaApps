@@ -26,6 +26,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     @Published private(set) var working = false
     @Published private(set) var installing = false
     @Published private(set) var extractionProgress: Double?
+    @Published private(set) var preparedFolder: URL?
     @Published private(set) var error: String?
 
     private let files = FileManager.default
@@ -54,7 +55,10 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
               GameDataSource.safeName(saved.name), GameDataSource.accepts(saved.share) else { return }
         transfer = saved
         received = length(of: payload(saved))
-        guard received < saved.size else { return }
+        if received == saved.size {
+            preparedFolder = findPreparedFolder(for: saved)
+            return
+        }
         working = true
         session.getAllTasks { [weak self] tasks in
             DispatchQueue.main.async {
@@ -100,6 +104,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
             if files.fileExists(atPath: root.path) { try files.removeItem(at: root) }
             transfer = nil
             received = 0
+            preparedFolder = nil
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -118,23 +123,48 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     @MainActor
-    func saveFolder(to destination: GameArchive.Destination, replacing: Bool) async throws {
-        guard !installing, let source = exportURL, let id = transfer?.id else {
+    func prepareFolder() async throws -> URL {
+        guard !installing, let source = exportURL, let transfer else {
             throw GameArchive.Failure.destinationUnavailable
         }
+        if let prepared = findPreparedFolder(for: transfer) {
+            preparedFolder = prepared
+            return prepared
+        }
+        preparedFolder = nil
+        let id = transfer.id
+        let directory = exportDirectory(for: transfer)
         installing = true
         extractionProgress = nil
         defer { installing = false; extractionProgress = nil }
-        try await Task.detached(priority: .userInitiated) {
-            try GameArchive.save(source, in: destination, replacing: replacing, transferID: id) { [weak self] fraction in
+        let folder = try await Task.detached(priority: .userInitiated) {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            return try GameArchive.install(source, in: directory, replacing: false, transferID: id) { [weak self] fraction in
                 Task { @MainActor in
                     guard let self, self.installing, self.transfer?.id == id else { return }
                     self.extractionProgress = max(self.extractionProgress ?? 0, fraction)
                 }
             }
         }.value
-        installing = false
+        preparedFolder = folder
+        return folder
+    }
+
+    func completeExport(of source: URL) {
+        guard source == preparedFolder || source == exportURL || source == transfer.map(payload) else { return }
         discard()
+    }
+
+    private func exportDirectory(for record: Transfer) -> URL {
+        payload(record).deletingLastPathComponent().appendingPathComponent(".export", isDirectory: true)
+    }
+
+    private func findPreparedFolder(for record: Transfer) -> URL? {
+        guard let entries = try? files.contentsOfDirectory(at: exportDirectory(for: record),
+            includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]),
+              entries.count == 1, let folder = entries.first,
+              (try? folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { return nil }
+        return folder
     }
 
     func handleSystemEvents(_ completion: @escaping () -> Void) {
