@@ -43,7 +43,17 @@ app.build_configurations.each do |config|
   value = config.build_settings.fetch('SWIFT_ACTIVE_COMPILATION_CONDITIONS', '$(inherited)')
   config.build_settings['SWIFT_ACTIVE_COMPILATION_CONDITIONS'] = Array(value).join(' ') + ' ARCHIVE_LIVE_ACTIVITY_TEST'
 end
-app.add_dependency(widget)
+# The app also has a package-product dependency without a target proxy.
+# Create the local dependency explicitly so it coexists with that package.
+proxy = project.new(objects::PBXContainerItemProxy)
+proxy.container_portal = project.root_object.uuid
+proxy.proxy_type = '1'
+proxy.remote_global_id_string = widget.uuid
+proxy.remote_info = widget.name
+dependency = project.new(objects::PBXTargetDependency)
+dependency.target = widget
+dependency.target_proxy = proxy
+app.dependencies << dependency
 embed = app.new_copy_files_build_phase('Embed Archive Activity')
 embed.dst_subfolder_spec = '13'
 embed.add_file_reference(widget.product_reference)
