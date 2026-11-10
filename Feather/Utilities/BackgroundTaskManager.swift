@@ -22,9 +22,8 @@ class BackgroundTaskManager: ObservableObject {
 	private var registeredTasks: Set<String> = []
     private var requested: [String: Double] = [:]
     private var subtitles: [String: String] = [:]
-    private var stopActions: [String: () -> Void] = [:]
 	
-	func startTask(for downloadId: String, filename: String, onStop: (() -> Void)? = nil) {
+	func startTask(for downloadId: String, filename: String) {
 		guard UIApplication.shared.applicationState == .active else { return }
         let taskIdentifier = "\(baseId).\(downloadId.md5)"
         guard requested[taskIdentifier] == nil else { return }
@@ -44,9 +43,7 @@ class BackgroundTaskManager: ObservableObject {
                         guard self.activeTasks[task.identifier] === task else { return }
                         // The system uses the same handler for its Stop button and
                         // runtime expiration. Neither may silently restart the job.
-                        if let stop = self.stopActions[task.identifier] {
-                            stop()
-                        } else if let download = DownloadManager.shared.getDownload(by: downloadId) {
+                        if let download = DownloadManager.shared.getDownload(by: downloadId) {
                             DownloadManager.shared.cancelDownload(download)
                         } else {
                             self.stopTask(for: downloadId, success: false)
@@ -64,7 +61,6 @@ class BackgroundTaskManager: ObservableObject {
 		}
 		
 		requested[taskIdentifier] = 0
-        stopActions[taskIdentifier] = onStop
         let request = BGContinuedProcessingTaskRequest(identifier: taskIdentifier, title: filename, subtitle: .localized("Downloading"))
 		request.strategy = .queue
 		do {
@@ -72,7 +68,6 @@ class BackgroundTaskManager: ObservableObject {
             DownloadManager.shared.backgroundRuntimeDidChange("continued-queued")
 		} catch {
 			requested.removeValue(forKey: taskIdentifier)
-            stopActions.removeValue(forKey: taskIdentifier)
             let failure = error as NSError
             DownloadManager.shared.backgroundRuntimeDidChange("continued-rejected \(failure.domain) \(failure.code)")
 		}
@@ -102,7 +97,6 @@ class BackgroundTaskManager: ObservableObject {
 		let taskIdentifier = "\(baseId).\(downloadId.md5)"
 		requested.removeValue(forKey: taskIdentifier)
         subtitles.removeValue(forKey: taskIdentifier)
-        stopActions.removeValue(forKey: taskIdentifier)
         BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: taskIdentifier)
         guard let task = activeTasks[taskIdentifier] else { return }
 		if success { task.progress.completedUnitCount = task.progress.totalUnitCount }

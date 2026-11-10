@@ -7,10 +7,12 @@ struct GameDataFileRow: View {
     let file: ASRepository.App.AdditionalFile
     @ObservedObject private var download = GameDataDownload.shared
     @State private var saving = false
+    @State private var selectingFolder = false
     @State private var confirmDelete = false
-    @State private var replaceDestination: URL?
+    @State private var replaceDestination: GameArchive.Destination?
     @State private var confirmReplace = false
     @State private var saveError: String?
+    @State private var savedFolder = false
 
     private var extractsArchive: Bool { file.extractArchive == true }
 
@@ -36,17 +38,31 @@ struct GameDataFileRow: View {
                         Image(systemName: "ellipsis.circle").font(.title3)
                     }.accessibilityLabel("Действия с загрузкой").disabled(download.installing)
                 } else {
-                    Button { download.start(share: file.url, title: file.name) } label: {
+                    Button { savedFolder = false; download.start(share: file.url) } label: {
                         AdditionalFileAction(title: "Скачать", icon: "arrow.down")
                     }.buttonStyle(.plain)
                 }
             }
             if matches {
                 if download.installing {
-                    ProgressView("Распаковываем архив…")
+                    if let progress = download.extractionProgress {
+                        ProgressView(value: progress) {
+                            Text("Распаковываем архив · \(progress.formatted(.percent.precision(.fractionLength(0))))")
+                        }
+                    } else {
+                        ProgressView("Готовим распаковку…")
+                    }
                 } else if download.ready {
                     Text("Файл скачан").font(.subheadline).foregroundStyle(.secondary)
-                    Button { saving = download.exportURL != nil } label: {
+                    Button {
+                        saveError = nil
+                        guard download.exportURL != nil else {
+                            saveError = "Не удалось открыть скачанный файл."
+                            return
+                        }
+                        if extractsArchive { selectingFolder = true }
+                        else { saving = true }
+                    } label: {
                         AdditionalFileAction(title: extractsArchive ? "Сохранить" : "Сохранить в Файлы", icon: "folder")
                     }.buttonStyle(.plain)
                 } else {
@@ -59,7 +75,7 @@ struct GameDataFileRow: View {
                         }.font(.footnote).monospacedDigit()
                     }
                     if !download.working {
-                        Button { download.start(share: file.url, title: file.name) } label: {
+                        Button { download.start(share: file.url) } label: {
                             AdditionalFileAction(title: "Продолжить", icon: "arrow.down")
                         }.buttonStyle(.plain)
                     }
@@ -72,6 +88,10 @@ struct GameDataFileRow: View {
             if let error = saveError ?? download.error {
                 Text(error).font(.footnote).foregroundStyle(.secondary)
             }
+            if savedFolder {
+                Label("Папка сохранена", systemImage: "checkmark.circle")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
         }
         .padding(16)
         .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
@@ -83,30 +103,37 @@ struct GameDataFileRow: View {
             }
             Button("Назад", role: .cancel) {}
         }
-        .confirmationDialog("Заменить существующую папку?", isPresented: $confirmReplace, titleVisibility: .visible) {
+        .alert("Заменить существующую папку?", isPresented: $confirmReplace) {
             Button("Заменить", role: .destructive) {
                 if let destination = replaceDestination { saveFolder(at: destination, replacing: true) }
                 replaceDestination = nil
             }
             Button("Отмена", role: .cancel) { replaceDestination = nil }
         }
+        .fileImporter(isPresented: $selectingFolder, allowedContentTypes: [.folder]) { result in
+            do {
+                let destination = try GameArchive.Destination(result.get())
+                saveFolder(at: destination, replacing: false)
+            } catch {
+                saveError = "Не удалось выбрать папку. Скачанный ZIP остался на iPhone."
+            }
+        }
         .sheet(isPresented: $saving) {
             if let url = download.exportURL {
-                GameDataExporter(url: url, chooseFolder: extractsArchive) { result in
+                GameDataExporter(url: url) { result in
                     saving = false
-                    guard let result else { return }
-                    if extractsArchive { saveFolder(at: result, replacing: false) }
-                    else { download.discard() }
+                    if result != nil { download.discard() }
                 }
             }
         }
     }
 
-    private func saveFolder(at destination: URL, replacing: Bool) {
+    private func saveFolder(at destination: GameArchive.Destination, replacing: Bool) {
         saveError = nil
         Task { @MainActor in
             do {
                 try await download.saveFolder(to: destination, replacing: replacing)
+                savedFolder = true
             } catch GameArchive.Failure.destinationExists {
                 replaceDestination = destination
                 confirmReplace = true
@@ -120,15 +147,12 @@ struct GameDataFileRow: View {
 
 struct GameDataExporter: UIViewControllerRepresentable {
     let url: URL
-    let chooseFolder: Bool
     let finished: (URL?) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(finished: finished) }
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = chooseFolder
-            ? UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
-            : UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+        let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
         picker.delegate = context.coordinator
         return picker
     }

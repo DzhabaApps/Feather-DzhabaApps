@@ -16,20 +16,31 @@ enum GameArchive {
         }
     }
 
-    static func save(_ zip: URL, in destination: URL, replacing: Bool, transferID: UUID) throws {
-        guard destination.startAccessingSecurityScopedResource() else { throw Failure.destinationUnavailable }
-        defer { destination.stopAccessingSecurityScopedResource() }
+    final class Destination: @unchecked Sendable {
+        let url: URL
+
+        init(_ url: URL) throws {
+            self.url = url
+            guard url.startAccessingSecurityScopedResource() else { throw Failure.destinationUnavailable }
+        }
+
+        deinit { url.stopAccessingSecurityScopedResource() }
+    }
+
+    static func save(_ zip: URL, in destination: Destination, replacing: Bool, transferID: UUID,
+                     progress: @escaping (Double) -> Void) throws {
         var coordinationError: NSError?
         var result: Result<Void, Error>?
-        NSFileCoordinator().coordinate(writingItemAt: destination, options: [], error: &coordinationError) { folder in
-            result = Result { try install(zip, in: folder, replacing: replacing, transferID: transferID) }
+        NSFileCoordinator().coordinate(writingItemAt: destination.url, options: [], error: &coordinationError) { folder in
+            result = Result { try install(zip, in: folder, replacing: replacing, transferID: transferID, progress: progress) }
         }
         if let coordinationError { throw coordinationError }
         guard let result else { throw Failure.destinationUnavailable }
         try result.get()
     }
 
-    static func install(_ zip: URL, in folder: URL, replacing: Bool, transferID: UUID) throws {
+    static func install(_ zip: URL, in folder: URL, replacing: Bool, transferID: UUID,
+                        progress: (Double) -> Void = { _ in }) throws {
         let archive = try Archive(url: zip, accessMode: .read)
         let expectedCount = try entryCount(in: zip)
         guard expectedCount > 0, expectedCount <= 100_000 else { throw Failure.invalid }
@@ -70,9 +81,18 @@ enum GameArchive {
         var keepBackup = false
         defer { if !keepBackup { try? fm.removeItem(at: staging) } }
 
+        var written: UInt64 = 0
+        var lastUpdate = -Double.infinity
         for (entry, path) in entries {
             let output = path.reduce(extracted) { $0.appendingPathComponent($1) }
-            try extract(entry, from: archive, to: output)
+            try extract(entry, from: archive, to: output) { count in
+                written += count
+                let now = ProcessInfo.processInfo.systemUptime
+                if total > 0, now - lastUpdate >= 0.25 {
+                    lastUpdate = now
+                    progress(min(0.99, Double(written) / Double(total)))
+                }
+            }
         }
         let ready = extracted.appendingPathComponent(root, isDirectory: true)
         if hasTarget { try fm.moveItem(at: target, to: backup) }
@@ -88,6 +108,7 @@ enum GameArchive {
             }
             throw error
         }
+        progress(1)
     }
 
     private static func components(of entry: Entry) throws -> [String] {
@@ -103,7 +124,8 @@ enum GameArchive {
         return parts
     }
 
-    private static func extract(_ entry: Entry, from archive: Archive, to output: URL) throws {
+    private static func extract(_ entry: Entry, from archive: Archive, to output: URL,
+                                didWrite: (UInt64) -> Void) throws {
         let fm = FileManager.default
         if entry.type == .directory {
             try fm.createDirectory(at: output, withIntermediateDirectories: true)
@@ -120,6 +142,7 @@ enum GameArchive {
             guard UInt64(bytes.count) <= entry.uncompressedSize - written else { throw Failure.invalid }
             try handle.write(contentsOf: bytes)
             written += UInt64(bytes.count)
+            didWrite(UInt64(bytes.count))
         }
         guard written == entry.uncompressedSize, crc == entry.checksum else { throw Failure.invalid }
         try handle.synchronize()

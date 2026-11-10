@@ -43,7 +43,7 @@ struct AdditionalDocumentRow: View {
         .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 18))
         .sheet(isPresented: $saving) {
             if let url = download.savedURL {
-                GameDataExporter(url: url, chooseFolder: false) { destination in
+                GameDataExporter(url: url) { destination in
                     saving = false
                     if destination != nil { download.clear() }
                 }
