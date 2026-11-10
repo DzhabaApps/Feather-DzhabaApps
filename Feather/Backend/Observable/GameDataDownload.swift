@@ -40,6 +40,9 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     private let diagnosticsURL = URL.cachesDirectory.appendingPathComponent("DRStoreGameDataDiagnostics.txt")
     private var diagnosticLines: [String] = []
     private var lastProgressLog = -Double.infinity
+    #if ARCHIVE_LIVE_ACTIVITY_TEST && !targetEnvironment(macCatalyst)
+    private lazy var archiveActivity = ArchiveLiveActivity()
+    #endif
 
     private lazy var session: URLSession = {
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionID)
@@ -110,6 +113,11 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     private func beginProgress(title: String) {
+        #if ARCHIVE_LIVE_ACTIVITY_TEST && !targetEnvironment(macCatalyst)
+        if #available(iOS 16.2, *) {
+            archiveActivity.begin(title: title, received: received, total: transfer?.size)
+        }
+        #else
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.startTask(for: progressID, filename: title) { [weak self] in
@@ -117,6 +125,7 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
                 self?.pause()
             }
         }
+        #endif
         #endif
     }
 
@@ -147,19 +156,29 @@ final class GameDataDownload: NSObject, ObservableObject, URLSessionDownloadDele
     }
 
     private func showProgress() {
+        #if ARCHIVE_LIVE_ACTIVITY_TEST && !targetEnvironment(macCatalyst)
+        if #available(iOS 16.2, *) { archiveActivity.update(received: received, total: transfer?.size) }
+        #else
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *), let size = transfer?.size, size > 0 {
             BackgroundTaskManager.shared.updateProgress(for: progressID, progress: Double(received) / Double(size),
                 stage: GameDataSource.progressText(received: received, total: size))
         }
         #endif
+        #endif
     }
 
     private func finishProgress(success: Bool) {
+        #if ARCHIVE_LIVE_ACTIVITY_TEST && !targetEnvironment(macCatalyst)
+        if #available(iOS 16.2, *) {
+            archiveActivity.end(received: received, total: transfer?.size, success: success)
+        }
+        #else
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 26.0, *) {
             BackgroundTaskManager.shared.stopTask(for: progressID, success: success)
         }
+        #endif
         #endif
     }
 

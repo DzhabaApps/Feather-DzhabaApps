@@ -22,6 +22,7 @@ struct FeatherApp: App {
 	@StateObject private var access = FeatherAccessManager.shared
 	@Environment(\.scenePhase) private var scenePhase
 	@AppStorage("Feather.userTintColor") private var accentHex = "#7866E8"
+	@State private var showArchiveFromActivity = false
 	let storage = Storage.shared
 
 	init() {
@@ -72,6 +73,7 @@ struct FeatherApp: App {
 					.presentationDetents([.height(220)])
 					.presentationDragIndicator(.visible)
 			}
+			.sheet(isPresented: $showArchiveFromActivity) { ArchiveActivityDestination() }
 			.animation(.smooth, value: downloadManager.downloads.description)
 			// dear god help me
 			.onAppear {
@@ -123,6 +125,10 @@ struct FeatherApp: App {
 	
 	private func _handleURL(_ url: URL) {
 		guard access.permitsAccess() else { return }
+		if url.scheme == "feather", url.host == "gta-download" {
+			showArchiveFromActivity = true
+			return
+		}
 		if url.scheme == "feather" || url.scheme == "fizer-preview" {
 			/// feather://install/<url.ipa>
 			if

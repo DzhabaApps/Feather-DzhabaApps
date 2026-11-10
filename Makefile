@@ -74,6 +74,9 @@ $(PLATFORMS):
 	cp -R _build/Applications/*.app _build/Payload/Feather.app
 	python3 tools/finalize_app_metadata.py _build/Payload/Feather.app
 	chmod -R 0755 _build/Payload/Feather.app
+	@if [ -d _build/Payload/Feather.app/PlugIns/ArchiveActivity.appex ]; then \
+		codesign --force --sign - --timestamp=none _build/Payload/Feather.app/PlugIns/ArchiveActivity.appex; \
+	fi
 	codesign --force --sign - --timestamp=none _build/Payload/Feather.app
 
 	mkdir -p packages
