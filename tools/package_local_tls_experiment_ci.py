@@ -4,6 +4,12 @@ import os
 import pathlib
 import subprocess
 
+# Owner-only import test: compile the IPA and check only the changed import path.
+if os.environ.get('GITHUB_REF') == 'refs/heads/codex/telegram-ipa-import-test':
+    subprocess.run(['python3', 'tools/check_incoming_import.py'], check=True)
+    subprocess.run(['make', 'iphoneos'], check=True)
+    raise SystemExit(0)
+
 instruction_branches = {'refs/heads/codex/instruction-collections-20261109', 'refs/heads/codex/instruction-folder-rows-20261109'}
 archive_branches = {'refs/heads/codex/gta-game-data-unpack', 'refs/heads/codex/additional-file-download-progress',
                     'refs/heads/codex/download-controls-and-publisher', 'refs/heads/codex/archive-background-and-save',

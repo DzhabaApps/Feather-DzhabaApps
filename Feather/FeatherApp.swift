@@ -20,6 +20,7 @@ struct FeatherApp: App {
 	@StateObject var downloadManager = DownloadManager.shared
 	@StateObject private var repositoryInstaller = RepositoryInstallCoordinator.shared
 	@StateObject private var access = FeatherAccessManager.shared
+	@StateObject private var incoming = IncomingPackageImporter.shared
 	@Environment(\.scenePhase) private var scenePhase
 	@AppStorage("Feather.userTintColor") private var accentHex = "#7866E8"
 	let storage = Storage.shared
@@ -41,16 +42,16 @@ struct FeatherApp: App {
 					.transition(.move(edge: .top).combined(with: .opacity))
 				VariedTabbarView()
 					.environment(\.managedObjectContext, storage.context)
-					.onOpenURL(perform: _handleURL)
 					.transition(.move(edge: .top).combined(with: .opacity))
 			}
 			.environment(\.locale, Locale(identifier: "ru"))
 			.overlay {
 				if access.state != .active { FeatherAccessView(access: access) }
 			}
-			.task { await access.refresh(); downloadManager.processForegroundDownloads() }
+			.task { incoming.recoverInbox(); await access.refresh(); incoming.processPending(); downloadManager.processForegroundDownloads() }
+			.onChange(of: access.state) { _ in incoming.processPending() }
 			.onChange(of: scenePhase) { phase in
-				if phase == .active { Task { await access.refresh(); downloadManager.processForegroundDownloads() } }
+				if phase == .active { incoming.recoverInbox(); Task { await access.refresh(); incoming.processPending(); downloadManager.processForegroundDownloads() } }
 			}
 			.overlay {
 				if let name = repositoryInstaller.signingName {
@@ -85,6 +86,19 @@ struct FeatherApp: App {
 			}
 			.tint(Color(hex: accentHex))
 			.accentColor(Color(hex: accentHex))
+			.onOpenURL(perform: _handleURL)
+			.overlay {
+				if let name = incoming.importingName {
+					VStack(spacing: 12) {
+						ProgressView()
+						Text("Импорт IPA").font(.headline)
+						Text(name).font(.footnote).lineLimit(2)
+					}.padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20)).padding()
+				}
+			}
+			.alert("Импорт IPA", isPresented: $incoming.showMessage) {
+				Button("OK", role: .cancel) {}
+			} message: { Text(incoming.message) }
 		}
 	}
 
@@ -122,6 +136,10 @@ struct FeatherApp: App {
 	}
 	
 	private func _handleURL(_ url: URL) {
+		if url.isFileURL {
+			incoming.receive(url)
+			return
+		}
 		guard access.permitsAccess() else { return }
 		if url.scheme == "feather" || url.scheme == "fizer-preview" {
 			/// feather://install/<url.ipa>
@@ -131,23 +149,116 @@ struct FeatherApp: App {
 			{
 				_ = DownloadManager.shared.startDownload(from: downloadURL)
 			}
-		} else {
-			if url.pathExtension == "ipa" || url.pathExtension == "tipa" {
-                let isScoped = FileManager.default.isFileFromFileProvider(at: url)
-                if isScoped && !url.startAccessingSecurityScopedResource() { return }
-                let download = downloadManager.startArchive(from: url, id: "FeatherManualDownload_\(UUID().uuidString)")
-                try? downloadManager.handlePachageFile(url: url, dl: download) {
-                    if isScoped { url.stopAccessingSecurityScopedResource() }
-                }
-
-				
-				return
-			}
 		}
 	}
 }
 
+// Own the incoming file before waiting for access or starting asynchronous extraction.
+// Some Open In deliveries land in Documents/Inbox before SwiftUI receives its URL.
+final class IncomingPackageImporter: ObservableObject {
+    static let shared = IncomingPackageImporter()
+    @Published var importingName: String?
+    @Published var message = ""
+    @Published var showMessage = false
+    private var receiving = Set<URL>()
+    private var pending: [(source: URL, staged: URL)] = []
+    private var importing = false
+
+    func receive(_ url: URL) {
+        guard url.isFileURL, !receiving.contains(url) else { return }
+        let ext = url.pathExtension.lowercased()
+        guard ["ipa", "tipa"].contains(ext) else {
+            notify("Не удалось принять файл «\(url.lastPathComponent)». Отправьте файл с расширением .ipa или .tipa.")
+            return
+        }
+        receiving.insert(url)
+        importingName = url.lastPathComponent
+        // A false result can also mean a local Inbox file needs no security scope.
+        let scoped = url.startAccessingSecurityScopedResource()
+        Task { @MainActor in
+            do {
+                let staged = try await Task.detached(priority: .userInitiated) {
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    let folder = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("FeatherIncoming/\(UUID().uuidString)", isDirectory: true)
+                    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    let target = folder.appendingPathComponent("package.\(ext)")
+                    do {
+                        var copyError: Error?
+                        var coordinationError: NSError?
+                        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { readable in
+                            do { try FileManager.default.copyItem(at: readable, to: target) }
+                            catch { copyError = error }
+                        }
+                        if let error = coordinationError { throw error }
+                        if let error = copyError { throw error }
+                        return target
+                    } catch {
+                        try? FileManager.default.removeItem(at: folder)
+                        throw error
+                    }
+                }.value
+                pending.append((url, staged))
+                if !FeatherAccessManager.shared.permitsAccess() {
+                    await FeatherAccessManager.shared.refresh()
+                }
+                processPending()
+                if !FeatherAccessManager.shared.permitsAccess() {
+                    importingName = nil
+                    notify("Файл принят. Для добавления в библиотеку дождитесь проверки доступа к DR Store.")
+                }
+            } catch {
+                receiving.remove(url)
+                importingName = nil
+                notify("Не удалось прочитать IPA: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func recoverInbox() {
+        let inbox = URL.documentsDirectory.appendingPathComponent("Inbox", isDirectory: true)
+        let files = (try? FileManager.default.contentsOfDirectory(at: inbox, includingPropertiesForKeys: nil)) ?? []
+        for file in files where ["ipa", "tipa"].contains(file.pathExtension.lowercased()) { receive(file) }
+    }
+
+    func processPending() {
+        guard !importing, !pending.isEmpty, FeatherAccessManager.shared.permitsAccess() else { return }
+        importing = true
+        let item = pending.removeFirst()
+        importingName = item.source.lastPathComponent
+        let download = DownloadManager.shared.startArchive(from: item.staged, id: "FeatherManualDownload_\(UUID().uuidString)")
+        FR.handlePackageFile(item.staged, download: download) { error in
+            DownloadManager.shared.cancelDownload(download)
+            try? FileManager.default.removeItem(at: item.staged.deletingLastPathComponent())
+            self.receiving.remove(item.source)
+            self.importing = false
+            self.importingName = nil
+            if let error {
+                self.notify("Не удалось добавить IPA: \(error.localizedDescription)")
+            } else {
+                let inbox = URL.documentsDirectory.appendingPathComponent("Inbox").standardizedFileURL.path + "/"
+                if item.source.standardizedFileURL.path.hasPrefix(inbox) {
+                    try? FileManager.default.removeItem(at: item.source)
+                }
+                UserDefaults.standard.set(TabEnum.library.rawValue, forKey: "DRStore.selectedTab")
+                self.notify("Приложение добавлено в библиотеку. Теперь его можно подписать и установить.")
+            }
+            self.processPending()
+        }
+    }
+
+    private func notify(_ text: String) {
+        message = text
+        showMessage = true
+    }
+}
+
 class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+        guard url.isFileURL else { return false }
+        IncomingPackageImporter.shared.receive(url)
+        return true
+    }
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
         if identifier == GameDataDownload.sessionID {
             GameDataDownload.shared.handleSystemEvents(completionHandler)

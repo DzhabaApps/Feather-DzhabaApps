@@ -26,6 +26,9 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>thewonderofyou.Feather.ipa</string>
+				<string>com.apple.itunes.ipa</string>
+				<string>public.data</string>
+				<string>public.content</string>
 			</array>
 		</dict>
 		<dict>
@@ -40,6 +43,9 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>thewonderofyou.Feather.tipa</string>
+				<string>com.apple.itunes.ipa</string>
+				<string>public.data</string>
+				<string>public.content</string>
 			</array>
 		</dict>
 	</array>
@@ -137,6 +143,21 @@
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.apple.itunes.ipa</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string><string>public.archive</string></array>
+			<key>UTTypeDescription</key>
+			<string>iOS App Archive</string>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>ipa</string></array></dict>
+		</dict>
+	</array>
 	<key>UILaunchScreen</key>
 	<false/>
 	<key>UTExportedTypeDeclarations</key>
