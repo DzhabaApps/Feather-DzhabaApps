@@ -11,6 +11,7 @@ coordinator = 'final class IncomingPackageImporter: ObservableObject {' + coordi
 info = plistlib.loads((root/'Feather/Resources/Info.plist').read_bytes())
 assert 'com.apple.itunes.ipa' in info['CFBundleDocumentTypes'][0]['LSItemContentTypes']
 assert info['LSSupportsOpeningDocumentsInPlace'] is False
+scene_adapter = 'final class IncomingFileSceneDelegate:' + source.split('final class IncomingFileSceneDelegate:', 1)[1]
 harness = r'''
 import Foundation
 import Combine
@@ -26,6 +27,25 @@ final class DownloadManager {
     static let shared = DownloadManager()
     func startArchive(from url: URL, id: String) -> Download { Download() }
     func cancelDownload(_ download: Download) {}
+    var startedDownloads: [URL] = []
+    func startDownload(from url: URL) -> Download { startedDownloads.append(url); return Download() }
+}
+// The adapters below run the actual scene-delegate methods on macOS. The iPhone
+// build separately checks their conformance against UIKit's real declarations.
+protocol UIWindowSceneDelegate {}
+class UIScene: NSObject {
+    struct ConnectionOptions { var urlContexts: Set<UIOpenURLContext> }
+}
+class UISceneSession: NSObject {}
+final class UIOpenURLContext: NSObject {
+    let url: URL
+    init(_ url: URL) { self.url = url }
+}
+extension URL {
+    func validatedScheme(after marker: String) -> String? {
+        guard let range = absoluteString.range(of: marker) else { return nil }
+        return String(absoluteString[range.upperBound...])
+    }
 }
 enum FR {
     static var imported: [Data] = []
@@ -74,12 +94,33 @@ tests = r'''
         importer.receive(folder.appendingPathComponent("missing.ipa"))
         try await waitFor { importer.message.contains("IPA:") }
         precondition(FR.imported.count == 2)
+        let delegate = IncomingFileSceneDelegate()
+        let scene = UIScene()
+        let cold = folder.appendingPathComponent("cold.ipa")
+        try bytes.write(to: cold)
+        delegate.scene(scene, willConnectTo: UISceneSession(),
+                       options: UIScene.ConnectionOptions(urlContexts: [UIOpenURLContext(cold)]))
+        try await waitFor { FR.imported.count == 3 }
+        let warm = folder.appendingPathComponent("warm.ipa")
+        try bytes.write(to: warm)
+        let contexts: Set<UIOpenURLContext> = [UIOpenURLContext(warm)]
+        delegate.scene(scene, openURLContexts: contexts)
+        delegate.scene(scene, openURLContexts: contexts)
+        try await waitFor { FR.imported.count == 4 }
+        let install = URL(string: "feather://install/https://example.test/app.ipa")!
+        precondition(FeatherIncomingURLRouter.open(install))
+        precondition(FeatherIncomingURLRouter.open(install))
+        precondition(DownloadManager.shared.startedDownloads == [URL(string: "https://example.test/app.ipa")!])
+        FeatherAccessManager.shared.active = false
+        precondition(!FeatherIncomingURLRouter.open(URL(string: "feather://install/https://example.test/blocked.ipa")!))
+        precondition(DownloadManager.shared.startedDownloads.count == 1)
         print("Incoming IPA: uppercase extension, local file access, duplicate delivery, staging, access retry and missing-file error passed")
+        print("Incoming scenes: cold start, warm delivery, duplicate events and install links passed")
     }
 }
 '''
 with tempfile.TemporaryDirectory(prefix='dr-incoming-check-') as folder:
     path = pathlib.Path(folder)
-    (path/'check.swift').write_text(harness + coordinator + tests)
+    (path/'check.swift').write_text(harness + coordinator + scene_adapter + tests)
     subprocess.run(['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', str(path/'check.swift'), '-o', str(path/'check')], check=True)
     subprocess.run([str(path/'check')], check=True, timeout=30)

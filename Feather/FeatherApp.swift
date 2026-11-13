@@ -136,20 +136,7 @@ struct FeatherApp: App {
 	}
 	
 	private func _handleURL(_ url: URL) {
-		if url.isFileURL {
-			incoming.receive(url)
-			return
-		}
-		guard access.permitsAccess() else { return }
-		if url.scheme == "feather" || url.scheme == "fizer-preview" {
-			/// feather://install/<url.ipa>
-			if
-				let fullPath = url.validatedScheme(after: "/install/"),
-				let downloadURL = URL(string: fullPath)
-			{
-				_ = DownloadManager.shared.startDownload(from: downloadURL)
-			}
-		}
+		FeatherIncomingURLRouter.open(url)
 	}
 }
 
@@ -160,6 +147,7 @@ final class IncomingPackageImporter: ObservableObject {
     @Published var importingName: String?
     @Published var message = ""
     @Published var showMessage = false
+    @Published private(set) var status = "Файл от другого приложения ещё не получен."
     private var receiving = Set<URL>()
     private var pending: [(source: URL, staged: URL)] = []
     private var importing = false
@@ -172,6 +160,7 @@ final class IncomingPackageImporter: ObservableObject {
             return
         }
         receiving.insert(url)
+        status = "Файл получен. Подготавливаем IPA."
         importingName = url.lastPathComponent
         // A false result can also mean a local Inbox file needs no security scope.
         let scoped = url.startAccessingSecurityScopedResource()
@@ -199,6 +188,7 @@ final class IncomingPackageImporter: ObservableObject {
                     }
                 }.value
                 pending.append((url, staged))
+                status = "IPA подготовлена. Проверяем доступ."
                 if !FeatherAccessManager.shared.permitsAccess() {
                     await FeatherAccessManager.shared.refresh()
                 }
@@ -224,6 +214,7 @@ final class IncomingPackageImporter: ObservableObject {
     func processPending() {
         guard !importing, !pending.isEmpty, FeatherAccessManager.shared.permitsAccess() else { return }
         importing = true
+        status = "Добавляем IPA в библиотеку."
         let item = pending.removeFirst()
         importingName = item.source.lastPathComponent
         let download = DownloadManager.shared.startArchive(from: item.staged, id: "FeatherManualDownload_\(UUID().uuidString)")
@@ -248,16 +239,26 @@ final class IncomingPackageImporter: ObservableObject {
     }
 
     private func notify(_ text: String) {
+        status = text
         message = text
         showMessage = true
     }
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, configurationForConnecting session: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        // UIKit delivers the first Open In URL here, before a SwiftUI view exists.
+        for context in options.urlContexts { FeatherIncomingURLRouter.open(context.url) }
+        let configuration = UISceneConfiguration(name: nil, sessionRole: session.role)
+        if session.role == .windowApplication {
+            configuration.delegateClass = IncomingFileSceneDelegate.self
+        }
+        return configuration
+    }
+
     func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-        guard url.isFileURL else { return false }
-        IncomingPackageImporter.shared.receive(url)
-        return true
+        FeatherIncomingURLRouter.open(url)
     }
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
         if identifier == GameDataDownload.sessionID {
@@ -273,6 +274,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		_createPipeline()
 		_createDocumentsDirectories()
 		_addDefaultCertificates()
+		if let url = launchOptions?[.url] as? URL { FeatherIncomingURLRouter.open(url) }
 		return true
 	}
 	
@@ -388,4 +390,40 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 		}
 	}
 
+}
+
+// Public SwiftUI delegate-adaptor integration: handle both a newly connected
+// window and file delivery to an already running window, not only onOpenURL.
+final class IncomingFileSceneDelegate: NSObject, UIWindowSceneDelegate, ObservableObject {
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
+               options connectionOptions: UIScene.ConnectionOptions) {
+        for context in connectionOptions.urlContexts { FeatherIncomingURLRouter.open(context.url) }
+    }
+
+    func scene(_ scene: UIScene, openURLContexts contexts: Set<UIOpenURLContext>) {
+        for context in contexts { FeatherIncomingURLRouter.open(context.url) }
+    }
+}
+
+enum FeatherIncomingURLRouter {
+    private static var lastInstallURL: URL?
+    private static var lastInstallTime = Date.distantPast
+
+    @discardableResult static func open(_ url: URL) -> Bool {
+        if url.isFileURL {
+            IncomingPackageImporter.shared.receive(url)
+            return true
+        }
+        guard url.scheme == "feather" || url.scheme == "fizer-preview",
+              let path = url.validatedScheme(after: "/install/"),
+              let download = URL(string: path) else { return false }
+        guard FeatherAccessManager.shared.permitsAccess() else { return false }
+        // UIKit and SwiftUI can report the same delivery. Keep the existing
+        // installation URL route without starting two downloads for one event.
+        if lastInstallURL == url && Date().timeIntervalSince(lastInstallTime) < 1 { return true }
+        lastInstallURL = url
+        lastInstallTime = Date()
+        _ = DownloadManager.shared.startDownload(from: download)
+        return true
+    }
 }
