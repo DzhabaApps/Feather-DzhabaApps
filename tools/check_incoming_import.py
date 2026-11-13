@@ -52,7 +52,13 @@ extension URL {
 }
 enum FR {
     static var imported: [Data] = []
+    static var failNextImport = false
     static func handlePackageFile(_ url: URL, download: Download, completion: @escaping (Error?) -> Void) {
+        if failNextImport {
+            failNextImport = false
+            completion(NSError(domain: "ImportFixture", code: 1))
+            return
+        }
         do {
             precondition(url.pathExtension == "ipa")
             imported.append(try Data(contentsOf: url))
@@ -71,6 +77,7 @@ tests = r'''
         fatalError("Incoming import timed out")
     }
     @MainActor static func main() async throws {
+        UserDefaults.standard.removeObject(forKey: "DRStore.selectedTab")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -81,6 +88,8 @@ tests = r'''
         importer.receive(url)
         importer.receive(url) // Duplicate Open In callbacks must not import twice.
         try await waitFor { FR.imported.count == 1 }
+        precondition(!importer.showMessage) // Success needs no extra OK tap.
+        precondition(UserDefaults.standard.string(forKey: "DRStore.selectedTab") == TabEnum.library.rawValue)
         precondition(FR.imported == [bytes])
         precondition(FileManager.default.fileExists(atPath: url.path)) // External original retained.
         FeatherAccessManager.shared.active = false
@@ -92,10 +101,13 @@ tests = r'''
         precondition(FR.imported.count == 1)
         try FileManager.default.removeItem(at: second) // Staged copy must survive source removal.
         FeatherAccessManager.shared.active = true
+        importer.showMessage = false
         importer.processPending()
         try await waitFor { FR.imported.count == 2 }
+        precondition(!importer.showMessage)
         importer.receive(folder.appendingPathComponent("missing.ipa"))
         try await waitFor { importer.message.contains("IPA:") }
+        precondition(importer.showMessage) // A failed import still needs a visible explanation.
         precondition(FR.imported.count == 2)
         let delegate = IncomingFileSceneDelegate()
         let scene = UIScene()
@@ -119,8 +131,18 @@ tests = r'''
         precondition(DownloadManager.shared.startedDownloads.count == 1)
         precondition(!FeatherIncomingURLRouter.open(URL(string: "https://example.test/not-a-local-file")!))
         precondition(importer.message.contains("ссылку вместо файла"))
+        FeatherAccessManager.shared.active = true
+        importer.showMessage = false
+        let failed = folder.appendingPathComponent("corrupt.ipa")
+        try bytes.write(to: failed)
+        FR.failNextImport = true
+        importer.receive(failed)
+        try await waitFor { importer.showMessage }
+        precondition(importer.message.contains("Не удалось добавить IPA"))
+        precondition(FR.imported.count == 4)
         print("Incoming IPA: uppercase extension, local file access, duplicate delivery, staging, access retry and missing-file error passed")
         print("Incoming scenes: cold start, warm delivery, duplicate events and install links passed")
+        print("Incoming UX: silent success, library selection and visible failures passed")
     }
 }
 '''

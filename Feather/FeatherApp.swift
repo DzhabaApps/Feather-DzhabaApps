@@ -147,7 +147,6 @@ final class IncomingPackageImporter: ObservableObject {
     @Published var importingName: String?
     @Published var message = ""
     @Published var showMessage = false
-    @Published private(set) var status = "Файл от другого приложения ещё не получен."
     private var receiving = Set<URL>()
     private var pending: [(source: URL, staged: URL)] = []
     private var importing = false
@@ -160,7 +159,6 @@ final class IncomingPackageImporter: ObservableObject {
             return
         }
         receiving.insert(url)
-        status = "Файл получен. Подготавливаем IPA."
         importingName = url.lastPathComponent
         // A false result can also mean a local Inbox file needs no security scope.
         let scoped = url.startAccessingSecurityScopedResource()
@@ -188,7 +186,6 @@ final class IncomingPackageImporter: ObservableObject {
                     }
                 }.value
                 pending.append((url, staged))
-                status = "IPA подготовлена. Проверяем доступ."
                 if !FeatherAccessManager.shared.permitsAccess() {
                     await FeatherAccessManager.shared.refresh()
                 }
@@ -214,7 +211,6 @@ final class IncomingPackageImporter: ObservableObject {
     func processPending() {
         guard !importing, !pending.isEmpty, FeatherAccessManager.shared.permitsAccess() else { return }
         importing = true
-        status = "Добавляем IPA в библиотеку."
         let item = pending.removeFirst()
         importingName = item.source.lastPathComponent
         let download = DownloadManager.shared.startArchive(from: item.staged, id: "FeatherManualDownload_\(UUID().uuidString)")
@@ -232,14 +228,12 @@ final class IncomingPackageImporter: ObservableObject {
                     try? FileManager.default.removeItem(at: item.source)
                 }
                 UserDefaults.standard.set(TabEnum.library.rawValue, forKey: "DRStore.selectedTab")
-                self.notify("Приложение добавлено в библиотеку. Теперь его можно подписать и установить.")
             }
             self.processPending()
         }
     }
 
     private func notify(_ text: String) {
-        status = text
         message = text
         showMessage = true
     }

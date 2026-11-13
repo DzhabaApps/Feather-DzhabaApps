@@ -12,7 +12,6 @@ import NimbleViews
 // MARK: - View
 struct LibraryView: View {
 	@StateObject var downloadManager = DownloadManager.shared
-	@ObservedObject private var incoming = IncomingPackageImporter.shared
 	
 	@State private var _selectedInfoAppPresenting: AnyApp?
 	@State private var _selectedInstallAppPresenting: AnyApp?
@@ -82,11 +81,6 @@ struct LibraryView: View {
 	var body: some View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
-                if Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String == "DR Store Test" {
-	                Section("Проверка импорта · \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "тест")") {
-                        Text(incoming.status).font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
                 if libraryEntries.isEmpty {
                     Text(_searchText.isEmpty ? "Скачайте приложение из каталога — оно появится здесь." : "Ничего не найдено")
                         .foregroundStyle(.secondary)
