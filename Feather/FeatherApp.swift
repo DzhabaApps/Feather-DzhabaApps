@@ -243,6 +243,10 @@ final class IncomingPackageImporter: ObservableObject {
         message = text
         showMessage = true
     }
+
+    func receiveUnsupportedLink() {
+        notify("Приложение получило ссылку вместо файла IPA. Передайте скачанный файл через «Поделиться».")
+    }
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -416,7 +420,10 @@ enum FeatherIncomingURLRouter {
         }
         guard url.scheme == "feather" || url.scheme == "fizer-preview",
               let path = url.validatedScheme(after: "/install/"),
-              let download = URL(string: path) else { return false }
+              let download = URL(string: path) else {
+            IncomingPackageImporter.shared.receiveUnsupportedLink()
+            return false
+        }
         guard FeatherAccessManager.shared.permitsAccess() else { return false }
         // UIKit and SwiftUI can report the same delivery. Keep the existing
         // installation URL route without starting two downloads for one event.

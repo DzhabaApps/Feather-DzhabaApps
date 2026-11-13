@@ -19,6 +19,8 @@
 			<string>feather_extension</string>
 			<key>CFBundleTypeName</key>
 			<string>iOS Package Archive</string>
+			<key>CFBundleTypeExtensions</key>
+			<array><string>ipa</string></array>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -36,6 +38,8 @@
 			<string>feather_extension</string>
 			<key>CFBundleTypeName</key>
 			<string>AirDrop friendly iOS app</string>
+			<key>CFBundleTypeExtensions</key>
+			<array><string>tipa</string></array>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -145,6 +149,8 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<false/>
+	<key>UISupportsDocumentBrowser</key>
+	<false/>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -185,10 +191,6 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>ipa</string>
-				</array>
-				<key>public.mime-type</key>
-				<array>
-					<string>application/octet-stream</string>
 				</array>
 			</dict>
 		</dict>

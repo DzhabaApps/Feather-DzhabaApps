@@ -83,7 +83,7 @@ struct LibraryView: View {
 		NBNavigationView(.localized("Library")) {
 			NBListAdaptable {
                 if Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String == "DR Store Test" {
-                    Section("Проверка импорта · 2.0.3") {
+	                Section("Проверка импорта · \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "тест")") {
                         Text(incoming.status).font(.footnote).foregroundStyle(.secondary)
                     }
                 }

@@ -11,6 +11,9 @@ coordinator = 'final class IncomingPackageImporter: ObservableObject {' + coordi
 info = plistlib.loads((root/'Feather/Resources/Info.plist').read_bytes())
 assert 'com.apple.itunes.ipa' in info['CFBundleDocumentTypes'][0]['LSItemContentTypes']
 assert info['LSSupportsOpeningDocumentsInPlace'] is False
+assert info['UISupportsDocumentBrowser'] is False
+assert info['CFBundleDocumentTypes'][0]['CFBundleTypeExtensions'] == ['ipa']
+assert 'application/octet-stream' not in info['UTExportedTypeDeclarations'][0]['UTTypeTagSpecification'].get('public.mime-type', [])
 scene_adapter = 'final class IncomingFileSceneDelegate:' + source.split('final class IncomingFileSceneDelegate:', 1)[1]
 harness = r'''
 import Foundation
@@ -114,6 +117,8 @@ tests = r'''
         FeatherAccessManager.shared.active = false
         precondition(!FeatherIncomingURLRouter.open(URL(string: "feather://install/https://example.test/blocked.ipa")!))
         precondition(DownloadManager.shared.startedDownloads.count == 1)
+        precondition(!FeatherIncomingURLRouter.open(URL(string: "https://example.test/not-a-local-file")!))
+        precondition(importer.message.contains("ссылку вместо файла"))
         print("Incoming IPA: uppercase extension, local file access, duplicate delivery, staging, access retry and missing-file error passed")
         print("Incoming scenes: cold start, warm delivery, duplicate events and install links passed")
     }
