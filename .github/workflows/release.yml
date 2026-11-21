@@ -2,6 +2,7 @@ name: Release
 
 on:
   push:
+    branches: [dr-store-interface-audit]
     tags:
       - v*
   workflow_dispatch:
@@ -32,7 +33,18 @@ jobs:
           VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" _build/Payload/*.app/Info.plist)
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
+      - name: Upload iPhone candidate
+        if: github.ref == 'refs/heads/dr-store-interface-audit'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DR-Store-${{ env.VERSION }}-candidate
+          path: |
+            upload/Feather.ipa
+            upload/Install-validation.json
+          if-no-files-found: error
+
       - name: Create Release
+        if: github.ref != 'refs/heads/dr-store-interface-audit'
         uses: softprops/action-gh-release@v2
         with:
           name: Feather v${{ env.VERSION }}
