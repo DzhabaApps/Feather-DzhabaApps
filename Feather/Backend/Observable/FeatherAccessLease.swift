@@ -67,8 +67,8 @@ enum FeatherAccessError: LocalizedError {
     case invalidResponse, unavailable, expired, disabled
     var errorDescription: String? {
         switch self {
-        case .expired: return "Подписка закончилась. Продлите подписку в боте."
-        case .disabled: return "Доступ к этой сборке отключён. Откройте актуальную ссылку в боте или обратитесь в поддержку."
+        case .expired: return "Подписка закончилась. Продлите её на сайте DR Store."
+        case .disabled: return "Доступ к этой сборке отключён. Проверьте ссылку на установку в разделе «Моя подписка» на сайте DR Store."
         default: return "Не удалось проверить подписку. Подключитесь к интернету и повторите проверку."
         }
     }

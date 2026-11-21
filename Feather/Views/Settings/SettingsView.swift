@@ -22,10 +22,10 @@ struct SettingsView: View {
 				NBSection("Моя подписка") {
 					LabeledContent("Статус", value: subscriptionStatus)
 					if let expiry = previewExpiry ?? access.expiresAt {
-						LabeledContent("Действует до", value: SubscriptionPresentation.expiry(expiry))
+						LabeledContent((previewState ?? access.state) == .expired ? "Срок истёк" : "Действует до", value: SubscriptionPresentation.expiry(expiry))
 					}
-					Link("Продлить подписку", destination: URL(string: "https://t.me/DzhabaApps_bot?start=renew")!)
-					Link("Поддержка", destination: URL(string: "https://t.me/dzhabaraduev")!)
+					Link("Продлить подписку", destination: SubscriptionPresentation.renewalURL)
+					Link("Поддержка", destination: SubscriptionPresentation.supportURL)
 				}
 				Section {
 					NavigationLink(destination: InstallationPreferencesView()) {

@@ -44,6 +44,10 @@ enum CatalogCategory: String, CaseIterable, Identifiable {
 }
 
 enum SubscriptionPresentation {
+    static let accountURL = URL(string: "https://dzhabaapps.ru/#account")!
+    static let renewalURL = URL(string: "https://dzhabaapps.ru/#renewal")!
+    static let supportURL = URL(string: "https://t.me/dzhabaraduev")!
+
     static func expiry(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "ru_RU")
